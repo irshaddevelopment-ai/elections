@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR>=454 && NR<=665' \"c:/wamp64/www/elections/elections/Dump20260426.sql\")",
+      "Bash(awk 'NR>=522 && NR<=665' \"c:/wamp64/www/elections/elections/Dump20260426.sql\")",
+      "PowerShell($src = \"C:\\\\wamp64\\\\www\\\\elections\\\\elections\"; $dst = \"C:\\\\wamp64\\\\www\\\\elections\"; Get-ChildItem -LiteralPath $src -Force | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination $dst -Force })",
+      "Bash(echo \"exit=$?\")",
+      "Bash(ls \"C:/wamp64/bin/php/\" 2>&1)",
+      "Read(//c/wamp64/bin/php/**)",
+      "PowerShell(\\(Get-Command composer -ErrorAction SilentlyContinue\\).Source; & \"C:\\\\wamp64\\\\bin\\\\php\\\\php8.3.14\\\\php.exe\" -v)",
+      "Read(//c/composer/**)",
+      "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\php\\\\php8.3.14\\\\php.exe\" \"C:\\\\composer\\\\composer.phar\" install --no-interaction --prefer-dist)",
+      "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\php\\\\php8.3.14\\\\php.exe\" artisan key:generate)",
+      "Bash(grep -E \"^CREATE TABLE \\\\`\\(sessions|cache|jobs|migrations\\)\\\\`\" \"c:/wamp64/www/elections/Dump20260426.sql\")",
+      "Bash(ls \"C:/wamp64/bin/mysql/\" 2>&1)",
+      "Read(//c/wamp64/bin/mysql/**)",
+      "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"CREATE TABLE sessions \\(id VARCHAR\\(255\\) PRIMARY KEY, user_id BIGINT UNSIGNED NULL, ip_address VARCHAR\\(45\\) NULL, user_agent TEXT NULL, payload LONGTEXT NOT NULL, last_activity INT NOT NULL, INDEX \\(user_id\\), INDEX \\(last_activity\\)\\);\")",
+      "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"DESCRIBE sessions;\")",
+      "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"SHOW TABLES LIKE '%cache%'; SHOW TABLES LIKE '%job%'; SHOW TABLES LIKE 'sessions';\")",
+      "Bash(grep -E \"^\\(vendor/|rr$|\\\\.env$|.*\\\\.sql$|node_modules/|\\\\.idea/|storage/\\)\")"
+    ]
+  }
+}

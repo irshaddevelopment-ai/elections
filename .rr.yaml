@@ -1,0 +1,28 @@
+version: "3"
+
+rpc:
+  listen: tcp://127.0.0.1:6001
+
+server:
+  command: "php artisan octane:worker --server=roadrunner --host=0.0.0.0 --port=8000 --rpc-port=6001"
+  relay: "pipes"
+
+http:
+  address: "0.0.0.0:8000"
+  middleware: ["static", "headers", "gzip"]
+  pool:
+    num_workers: 4
+    max_jobs: 500
+    debug: false
+  static:
+    dir: "public"
+    forbid: [".php", ".htaccess"]
+  headers:
+    response:
+      X-Powered-By: "RoadRunner"
+
+logs:
+  level: warn
+  mode: production
+  output: stdout
+  err_output: stderr

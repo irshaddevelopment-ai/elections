@@ -17,7 +17,12 @@
       "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"CREATE TABLE sessions \\(id VARCHAR\\(255\\) PRIMARY KEY, user_id BIGINT UNSIGNED NULL, ip_address VARCHAR\\(45\\) NULL, user_agent TEXT NULL, payload LONGTEXT NOT NULL, last_activity INT NOT NULL, INDEX \\(user_id\\), INDEX \\(last_activity\\)\\);\")",
       "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"DESCRIBE sessions;\")",
       "PowerShell(& \"C:\\\\wamp64\\\\bin\\\\mysql\\\\mysql8.3.0\\\\bin\\\\mysql.exe\" -u root election -e \"SHOW TABLES LIKE '%cache%'; SHOW TABLES LIKE '%job%'; SHOW TABLES LIKE 'sessions';\")",
-      "Bash(grep -E \"^\\(vendor/|rr$|\\\\.env$|.*\\\\.sql$|node_modules/|\\\\.idea/|storage/\\)\")"
+      "Bash(grep -E \"^\\(vendor/|rr$|\\\\.env$|.*\\\\.sql$|node_modules/|\\\\.idea/|storage/\\)\")",
+      "Bash(php -l \"c:\\\\wamp64\\\\www\\\\test\\\\elections\\\\app\\\\Http\\\\Controllers\\\\VoterController.php\")",
+      "Bash(php -r \"echo date\\('Y_m_d_His'\\);\")",
+      "Bash(php artisan *)",
+      "Bash(/c/wamp64/bin/php/php8.2.26/php.exe artisan *)",
+      "Bash(/c/wamp64/bin/php/php8.2.26/php.exe -r ' *)"
     ]
   }
 }

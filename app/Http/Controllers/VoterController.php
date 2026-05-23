@@ -478,141 +478,144 @@ class VoterController extends Controller
 
     public function saveVote(Request $request)
     {
-        try {
-            DB::unprepared('LOCK TABLES profiles WRITE');
-            DB::beginTransaction();
-            $jsonData = $request->json()->all();
-            //================save vote master
-            $vote_master = new Votemaster();
-            $vote_detail = new VoteDetail();
-            $max_vote_code = Votemaster::max('idvote_master') + 1;
-            $vote_master->vote_code = $max_vote_code;
-            $vote_master->user_code = $jsonData["usercode"];
-            $vote_master->election_code = $jsonData["electioncode"];
-            $vote_master->round_number = $jsonData["round_number"];
-            $vote_master->save();
+        $jsonData      = $request->json()->all();
+        $userCode      = $jsonData["usercode"];
+        $electionCode  = $jsonData["electioncode"];
+        $roundNumber   = $jsonData["round_number"];
+        $voteDetailIn  = $jsonData["info"] ?? [];
+        $sessionHandle = Session::getId();
 
-            $vote_detailmaster = $jsonData["info"];
-            $counter = 0;
-            foreach ($vote_detailmaster as $key => $votedetail) {
-                foreach ($votedetail as $votedetail_obj) {
-                    //$array_to_insert[$counter]["vote_code"] = $max_vote_code;//===stoped for testing #991
-                    $array_to_insert[$counter]["election_list_code"] = $key;
-                    $array_to_insert[$counter]["candidate"] = $votedetail_obj;
-                    $array_to_insert[$counter]["round_number"] = $jsonData["round_number"];
-                    $counter++;
+        // Replaces the previous `LOCK TABLES profiles WRITE` (which also blocked
+        // logins). Concurrency now relies on:
+        //   - AUTO_INCREMENT on vote_master.idvote_master for unique IDs
+        //   - lockForUpdate() to serialize only the same (user, election, round)
+        //   - 3 retries on deadlock victim under burst load
+        return DB::transaction(function () use (
+            $userCode, $electionCode, $roundNumber, $voteDetailIn, $sessionHandle
+        ) {
+            // Idempotency: a second submit for the same (user, election, round)
+            // returns success without inserting a duplicate vote.
+            $alreadyVoted = DB::table('vote_master')
+                ->where('user_code', $userCode)
+                ->where('election_code', $electionCode)
+                ->where('round_number', $roundNumber)
+                ->lockForUpdate()
+                ->exists();
+
+            if ($alreadyVoted) {
+                return 1;
+            }
+
+            // vote_code is kept equal to idvote_master to preserve the prior
+            // invariant; let AUTO_INCREMENT assign the ID, then mirror it.
+            $idVoteMaster = DB::table('vote_master')->insertGetId([
+                'user_code'     => $userCode,
+                'election_code' => $electionCode,
+                'round_number'  => $roundNumber,
+            ]);
+            DB::table('vote_master')
+                ->where('idvote_master', $idVoteMaster)
+                ->update(['vote_code' => $idVoteMaster]);
+
+            $detailRows = [];
+            foreach ($voteDetailIn as $listCode => $candidates) {
+                foreach ($candidates as $candidateCode) {
+                    $detailRows[] = [
+                        'election_list_code' => $listCode,
+                        'candidate'          => $candidateCode,
+                        'round_number'       => $roundNumber,
+                    ];
                 }
             }
-            if (isset($array_to_insert)) {
-                $vote_detail->insert($array_to_insert);
+            if (!empty($detailRows)) {
+                DB::table('vote_detail')->insert($detailRows);
             }
+
             DB::table('event_table')
-            ->where('session_handle',  Session::getId())
-            ->where('event_description','login')
-            ->update(['vote_description' => 'vote']);
-            /*$eventtab = new EventTable();
-            $eventtab->user_code = $jsonData["usercode"];
-            $eventtab->prf_code = $votedetail_obj;
-            $eventtab->connected = 1;
-            //$eventtab->loggedin_datetime = Carbon::now();
-            $eventtab->event_description = 'vote';
-            $eventtab->session_handle = Session::getId();
-            $eventtab->save();*/
-            DB::commit();
-            DB::unprepared('UNLOCK TABLES');
+                ->where('session_handle', $sessionHandle)
+                ->where('event_description', 'login')
+                ->update(['vote_description' => 'vote']);
+
             return 1;
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        }, 3);
     }
 
     public function savevotergroup(Request $request)
     {
-        try {
-            DB::unprepared('LOCK TABLES voters_group WRITE');
-            DB::beginTransaction();
-            $jsonData = $request->input('input_voters_group');
-            $votersgroupinfo = json_decode($jsonData, true); // Decode JSON string into an associative array
-            $electioncode = $votersgroupinfo['electioncode'];
-            $voter_group_name = $votersgroupinfo['voter_group_name'];
-            $votersgrouparray = json_decode($votersgroupinfo['votersgroup']);
-            //================save vote master
-            $votergroup = new VotersGroup();
-            //VotersGroup::where('election_code', $electioncode)->delete();
-            $max_votergroupcode = VotersGroup::max('voter_group_code') + 1;
-            $counter = 0;
-            foreach ($votersgrouparray as $key => $voter) {
+        $jsonData = $request->input('input_voters_group');
+        $votersgroupinfo  = json_decode($jsonData, true);
+        $electioncode     = $votersgroupinfo['electioncode'];
+        $voter_group_name = $votersgroupinfo['voter_group_name'];
+        $votersgrouparray = json_decode($votersgroupinfo['votersgroup']);
+
+        // Replaces `LOCK TABLES voters_group WRITE`. lockForUpdate on the MAX
+        // query serializes only concurrent admins running this same flow,
+        // without blocking other tables.
+        DB::transaction(function () use ($electioncode, $voter_group_name, $votersgrouparray) {
+            $max_votergroupcode = DB::table('voters_group')->lockForUpdate()->max('voter_group_code') + 1;
+
+            $array_to_insert = [];
+            foreach ($votersgrouparray as $voter) {
                 Voter::where('election_code', $electioncode)
                     ->where('profile_code', $voter)
                     ->update(['voter_group_code' => $max_votergroupcode]);
-                $array_to_insert[$counter]["voter_group_code"] = $max_votergroupcode;
-                $array_to_insert[$counter]["election_code"] = $electioncode;
-                $array_to_insert[$counter]["voter_group_name"] = $voter_group_name;
-                $array_to_insert[$counter]["description"] = "";
-                $counter++;
+                $array_to_insert[] = [
+                    'voter_group_code' => $max_votergroupcode,
+                    'election_code'    => $electioncode,
+                    'voter_group_name' => $voter_group_name,
+                    'description'      => '',
+                ];
             }
-            if (isset($array_to_insert)) {
-                $votergroup->insert($array_to_insert);
+            if (!empty($array_to_insert)) {
+                DB::table('voters_group')->insert($array_to_insert);
             }
+        }, 3);
 
-            DB::commit();
-            DB::unprepared('UNLOCK TABLES');
-            return back()->with('Success', 'Save success');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        return back()->with('Success', 'Save success');
     }
     public function savevoterinfo(Request $request)
     {
-        try {
-            DB::unprepared('LOCK TABLES voters WRITE');
-            DB::beginTransaction();
-            $jsonData = $request->input('input_voters_codes');
-            $votersinfo = json_decode($jsonData, true); // Decode JSON string into an associative array
-            $electioncode = $votersinfo['electioncode'];
-            $votersarray = json_decode($votersinfo['voters']);
-            //================save vote master
-            $voters = new Voter();
+        $jsonData     = $request->input('input_voters_codes');
+        $votersinfo   = json_decode($jsonData, true);
+        $electioncode = $votersinfo['electioncode'];
+        $votersarray  = json_decode($votersinfo['voters']);
+
+        // Replaces `LOCK TABLES voters WRITE` (which also wrongly excluded the
+        // users-table writes below). The whole replace-voters operation is now
+        // a single atomic transaction — partial failures roll back fully.
+        DB::transaction(function () use ($electioncode, $votersarray) {
             Voter::where('election_code', $electioncode)->delete();
             users::where('election_code', $electioncode)
-            ->where('isvoter',1)
-            ->where('profile_code','!=', 'admin')
-            ->whereNotIn('profile_code',$votersarray)
-            ->delete();
-            DB::commit();
-            DB::beginTransaction();
-            $counter = 0;  
-            foreach ($votersarray as $key => $voter) {
-                $array_to_insert[$counter]["profile_code"] = $voter;
-                $array_to_insert[$counter]["election_code"] = $electioncode;
-                $array_to_insert[$counter]["voter_status"] = 1;
-                $counter++;
+                ->where('isvoter', 1)
+                ->where('profile_code', '!=', 'admin')
+                ->whereNotIn('profile_code', $votersarray)
+                ->delete();
+
+            $array_to_insert = [];
+            foreach ($votersarray as $voter) {
+                $array_to_insert[] = [
+                    'profile_code'  => $voter,
+                    'election_code' => $electioncode,
+                    'voter_status'  => 1,
+                ];
             }
-           
-            if (isset($array_to_insert)) {
-                $voters->insert($array_to_insert);
+            if (!empty($array_to_insert)) {
+                DB::table('voters')->insert($array_to_insert);
             }
 
-            DB::commit();
-            DB::beginTransaction();
-            $this->GenerateUsersForElections($electioncode,$votersarray);
-            DB::commit();
-            DB::unprepared('UNLOCK TABLES');
-            return back()->with('Success', 'Save success');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+            $this->GenerateUsersForElections($electioncode, $votersarray);
+        }, 3);
+
+        return back()->with('Success', 'Save success');
     }
 
     public function genearteresults($electioncode)
     {
-        try {
+        // Replaces `LOCK TABLES profiles WRITE` — this method never writes to
+        // `profiles`, only to `candidates` and `election_rounds`. A standard
+        // transaction is sufficient and doesn't block concurrent logins.
+        return DB::transaction(function () use ($electioncode) {
             $candidateObj = new candidates();
-            DB::unprepared("LOCK TABLES profiles WRITE");
-            DB::beginTransaction();
             $active_round = ElectionRound::where("election_code", $electioncode)
                 ->where("round_status", 1)
                 ->select("round_number", "win_percentage", "min_win_percentage", "win_sign")
@@ -783,14 +786,8 @@ class VoterController extends Controller
                     ->where("round_number", $active_round->round_number)
                     ->update(['round_status' => '2']);
             }
-            DB::commit();
-            DB::unprepared("UNLOCK TABLES");
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
-        //echo json_encode($winning_array_Data);
-        return 1;
+            return 1;
+        }, 3);
     }
 
     function isGreaterThanOrEqualPercentOf($number1, $number2, $percentage)

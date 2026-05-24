@@ -68,17 +68,15 @@
         @if ($Elections)
         @foreach ($Elections as $election)
         <?php
-        $ElectionRoundsHashMap_Obj = $ElectionRoundsHashMap[$election['election_code']];
+        $ElectionRoundsHashMap_Obj = $ElectionRoundsHashMap[$election['election_code']] ?? [];
         $rowspanvar = sizeof($ElectionRoundsHashMap_Obj);
         $isChecked = $election['election_status'];
         $isstatusdisabled = false;
-        if (isset($ElectionRoundsHashMap_Obj)) {
-          foreach ($ElectionRoundsHashMap_Obj as $ElectionRoundsHashMap_Obj_var) {
-            $roundstatus = $ElectionRoundsHashMap_Obj_var->round_status;
-            if ($roundstatus != 0) {
-              $isstatusdisabled = true;
-              break;
-            }
+        foreach ($ElectionRoundsHashMap_Obj as $ElectionRoundsHashMap_Obj_var) {
+          $roundstatus = $ElectionRoundsHashMap_Obj_var->round_status;
+          if ($roundstatus != 0) {
+            $isstatusdisabled = true;
+            break;
           }
         }
         ?>

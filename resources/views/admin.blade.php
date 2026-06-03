@@ -185,6 +185,12 @@
   /* ── Rotate animation ── */
   @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   .rotate { animation: spin 1s linear infinite; }
+  .reset-header-message {
+    color: #198754;
+    font-size: .78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
 
   /* ── Search in modal ── */
   .modal-search input {
@@ -240,12 +246,14 @@
               @if($Elections)
               @foreach ($Elections as $election)
               <?php
-                $ElectionRoundsHashMap_Obj = $ElectionRoundsHashMap[$election['election_code']] ?? [];
+                $ElectionRoundsHashMap_Obj = $ElectionRoundsHashMap[$election['election_code']];
                 $rowspanvar = sizeof($ElectionRoundsHashMap_Obj);
                 $isChecked = $election['election_status'];
                 $isstatusdisabled = false;
-                foreach ($ElectionRoundsHashMap_Obj as $v) {
-                  if ($v->round_status != 0) { $isstatusdisabled = true; break; }
+                if (isset($ElectionRoundsHashMap_Obj)) {
+                  foreach ($ElectionRoundsHashMap_Obj as $v) {
+                    if ($v->round_status != 0) { $isstatusdisabled = true; break; }
+                  }
                 }
               ?>
               <tr>
@@ -393,6 +401,7 @@
         <button class="btn btn-outline-secondary btn-sm" type="button" id="btn_clearfilterloggedin">
           <i class="fas fa-times fa-xs me-1"></i> إلغاء التصفية
         </button>
+        <span id="resetUsercodeMessage"></span>
       </div>
 
       <div class="modal-stats" id="allnumber">
@@ -477,6 +486,7 @@
   var click_var = -1;
   var datatable1_dataset = [];
   var table1 = null;
+  var resetUsercodeTimer = null;
   let progressBar = document.querySelector('.progress-bar');
   let loadingContainer = document.querySelector('.loading-container');
 
@@ -531,7 +541,7 @@
         {
           targets: 9,
           render: function(data, type) {
-            if (type === 'display') return '<i class="fa fa-refresh" aria-hidden="true" id="refreshIcon"></i>';
+            if (type === 'display') return '<i class="fa fa-refresh js-reset-usercode" aria-hidden="true"></i>';
             return data;
           }
         }
@@ -541,7 +551,7 @@
     $('#dataTable1').on('click', 'tbody td:last-child', function() {
       var rowIndex = $('#dataTable1').DataTable().row($(this).closest('tr')).index();
       var rowData  = $('#dataTable1').DataTable().row(rowIndex).data();
-      resetusercode(rowData[8], rowIndex);
+      resetusercode(rowData[8], rowIndex, $(this).find('.js-reset-usercode'), $(this));
     });
 
     $('#btn_filterloggedin').on('click', function() {
@@ -564,15 +574,30 @@
     XLSX.writeFile(wb, filename + '.xlsx');
   }
 
-  function resetusercode(prfcode, rowIndex) {
-    $('#refreshIcon').addClass('rotate');
+  function resetusercode(prfcode, rowIndex, refreshIcon, cell) {
+    if (resetUsercodeTimer) {
+      clearTimeout(resetUsercodeTimer);
+      resetUsercodeTimer = null;
+    }
+    $('#resetUsercodeMessage').empty();
+    $('.js-reset-usercode').removeClass('rotate');
+    refreshIcon.addClass('rotate');
     axios.put('/resetusercode/' + prfcode)
       .then(response => {
-        $('#refreshIcon').removeClass('rotate');
-        showalert('تم تفعيل الرمز', 1, 2000);
-        if (rowIndex !== -1) $('#dataTable1').DataTable().cell(rowIndex, 5).data('نعم').draw();
+        if (rowIndex !== -1) {
+          $('#dataTable1').DataTable().cell(rowIndex, 5).data('نعم');
+        }
+        $('#resetUsercodeMessage').html('<span class="reset-header-message">تم تفعيل الرمز</span>');
+        resetUsercodeTimer = setTimeout(function() {
+          $('#resetUsercodeMessage').empty();
+          $('.js-reset-usercode').removeClass('rotate');
+          resetUsercodeTimer = null;
+        }, 1600);
       })
-      .catch(error => alert(error));
+      .catch(error => {
+        refreshIcon.removeClass('rotate');
+        alert(error);
+      });
   }
 
   function showalert(msg, type, timeout) {

@@ -19,6 +19,7 @@ use App\Models\LeaderVoterRelation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Maatwebsite\Excel\Facades\Excel;
+use Carbon\Carbon;
 use DateTime;
 
 class UsersController extends Controller
@@ -201,8 +202,6 @@ class UsersController extends Controller
     {
         if ($request->hasFile('excelFile')) {
             try {
-                DB::unprepared('LOCK TABLES profiles WRITE');
-                DB::beginTransaction();
                 $file = $request->file('excelFile');
 
                 $profile_var = new profiles();
@@ -238,6 +237,33 @@ class UsersController extends Controller
                 $rounds_index = array_search('عدد الجولات', $firstRow);
                 $voters_gourp_name_index = array_search('المجموعة', $firstRow);
                 $leader_index = array_search('المرشد', $firstRow);
+                $requiredHeaders = [
+                    'الاسم' => $full_name_index,
+                    'رقم الهاتف' => $mobile_index,
+                    'الجنس' => $sex_index,
+                    'العمر' => $age_index,
+                    'الصورة' => $picture_index,
+                    'التعريف' => $attach_index,
+                    'العملية الإنتخابية' => $election_name_index,
+                    'نوع العملية' => $election_type_index,
+                    'تاريخ العملية' => $election_date_index,
+                    'مرشح' => $iscandidate_index,
+                    'ناخب' => $isvoter_index,
+                    'اللائحة' => $candidate_gourp_name_index,
+                    'العدد المطلوب للنجاح' => $win_number_index,
+                    'عدد الجولات' => $rounds_index,
+                    'المجموعة' => $voters_gourp_name_index,
+                    'المرشد' => $leader_index,
+                ];
+                $missingHeaders = array_keys(array_filter($requiredHeaders, fn($index) => $index === false));
+                if (!empty($missingHeaders)) {
+                    return response()->json([
+                        'message' => 'الملف غير صحيح. الأعمدة الناقصة: ' . implode(', ', $missingHeaders)
+                    ], 422);
+                }
+
+                DB::beginTransaction();
+                $this->clearUsersExcelImportData();
                 // Remove the first row from the array
                 array_shift($data);
                 // Return a response, you might want to send more information
@@ -271,18 +297,33 @@ class UsersController extends Controller
                 $votersarray_to_insert = array();
                 //=====================
                 foreach ($data as $value) {
-                    $max_profile_array_Id++;
-                    $profiles_ids_array[$value[$full_name_index]] = $max_profile_array_Id;
+                    $full_name = trim($value[$full_name_index] ?? '');
+                    if ($full_name == '') {
+                        continue;
+                    }
+
+                    $existing_profile_code = profiles::where('full_name', $full_name)->value('profile_code');
+                    if ($existing_profile_code) {
+                        $profiles_ids_array[$full_name] = $existing_profile_code;
+                    } elseif (!isset($profiles_ids_array[$full_name])) {
+                        $max_profile_array_Id++;
+                        $profiles_ids_array[$full_name] = $max_profile_array_Id;
+                    }
                 }
                 foreach ($data as $value) {
-                    $max_profile_Id++;
+                    $full_name = trim($data[$counter][$full_name_index] ?? '');
+                    if ($full_name == '') {
+                        $counter++;
+                        continue;
+                    }
+
+                    $profile_code_var = $profiles_ids_array[$full_name];
                     //=================add profiles========================
-                    $exists = profiles::where(['full_name' => $data[$counter][$full_name_index]])->exists();
-                    $exists_in_array = in_array($data[$counter][$full_name_index], array_column($array_to_insert, 'full_name'));
+                    $exists = profiles::where(['full_name' => $full_name])->exists();
+                    $exists_in_array = in_array($full_name, array_column($array_to_insert, 'full_name'));
                     if (($exists == false) && ($exists_in_array == false)) {
-                        $profile_code_var = $max_profile_Id;
                         $array_to_insert[$counter]["profile_code"] = $profile_code_var;
-                        $array_to_insert[$counter]["full_name"] = $data[$counter][$full_name_index];
+                        $array_to_insert[$counter]["full_name"] = $full_name;
                         $array_to_insert[$counter]["mobile"] = $data[$counter][$mobile_index];
                         $sex = 1;
                         if ($data[$counter][$sex_index] != 'ذكر') {
@@ -297,7 +338,7 @@ class UsersController extends Controller
                         $array_to_insert[$counter]["picture"] = $data[$counter][$picture_index];
                         $array_to_insert[$counter]["attachment"] = $data[$counter][$attach_index];
                     } else {
-                        $profile_code_var = profiles::where(['full_name' => $data[$counter][$full_name_index]])->value('profile_code');
+                        $profile_code_var = $profiles_ids_array[$full_name];
                     }
                     //=================add profiles========================
                     //==============add elections
@@ -342,12 +383,14 @@ class UsersController extends Controller
                                     $electionroundsarray_to_insert[$round_counter_var]["round_status"] = 0;
                                     $round_counter_var++;
                                 }
-                            } else {
-
-                                $election_code_var = array_column(
+                            } elseif ($exists_in_array) {
+                                $election_code_var = $this->findPendingImportValue(
                                     $electionarray_to_insert,
+                                    ['election_name' => $election_name],
                                     'election_code'
-                                )[array_search($data[$counter][$election_name_index], array_column($electionarray_to_insert, 'election_name'))];
+                                );
+                            } else {
+                                $election_code_var = Election::where('election_name', $election_name)->value('election_code');
                             }
                             $old_election_name = $election_name;
                             $counter_election++;
@@ -371,12 +414,17 @@ class UsersController extends Controller
                                     $votergrouparray_to_insert[$counter_votertgroup]["voter_group_name"] = $voter_gourp_name;
                                     $votergrouparray_to_insert[$counter_votertgroup]["election_code"] = $election_code_var;
                                     $votergrouparray_to_insert[$counter_votertgroup]["description"] = "";
-                                } else {
-
-                                    $votergroup_code_var = array_column(
+                                } elseif ($exists_in_array) {
+                                    $votergroup_code_var = $this->findPendingImportValue(
                                         $votergrouparray_to_insert,
+                                        ['voter_group_name' => $voter_gourp_name, 'election_code' => $election_code_var],
                                         'voter_group_code'
-                                    )[array_search($voter_gourp_name, array_column($votergrouparray_to_insert, 'voter_group_name'))];
+                                    );
+                                } else {
+                                    $votergroup_code_var = VotersGroup::where([
+                                        'voter_group_name' => $voter_gourp_name,
+                                        'election_code' => $election_code_var
+                                    ])->value('voter_group_code');
                                 }
                                 $old_voter_gourp_name = $voter_gourp_name;
                                 $counter_votertgroup++;
@@ -398,11 +446,17 @@ class UsersController extends Controller
                                     $candidategrouparray_to_insert[$counter_candidatetgroup]["group_code"] = $candidategroup_code_var;
                                     $candidategrouparray_to_insert[$counter_candidatetgroup]["win_number"] =
                                         $data[$counter][$win_number_index];
-                                } else {
-                                    $candidategroup_code_var = array_column(
+                                } elseif ($exists_in_array) {
+                                    $candidategroup_code_var = $this->findPendingImportValue(
                                         $candidategrouparray_to_insert,
+                                        ['group_name' => $candidate_gourp_name, 'election_code' => $election_code_var],
                                         'group_code'
-                                    )[array_search($candidate_gourp_name, array_column($candidategrouparray_to_insert, 'group_name'))];
+                                    );
+                                } else {
+                                    $candidategroup_code_var = CandidatesGroup::where([
+                                        'group_name' => $candidate_gourp_name,
+                                        'election_code' => $election_code_var
+                                    ])->value('group_code');
                                 }
                                 $old_candidategroup_name = $candidate_gourp_name;
                                 $counter_candidatetgroup++;
@@ -429,36 +483,40 @@ class UsersController extends Controller
                         if (($leader_name != '') && ($voter_gourp_name != '')) {
                             //if ($old_leader_name != $leader_name) {
                             if (1 == 1) {
-                                $leader_prf_code = $profiles_ids_array[$data[$counter][$leader_index]];
-                                $exists = Leader::where([
-                                    'profile_code' => $leader_prf_code,
-                                    'election_code' => $election_code_var, 'voter_group_code' => $votergroup_code_var
-                                ])->exists();
-                                $exists_in_array = array_reduce($leaderarray_to_insert, function ($carry, $item) use ($leader_prf_code, $election_code_var, $votergroup_code_var) {
-                                    return $carry || ($item["profile_code"] == $leader_prf_code && $item["election_code"] == $election_code_var && $item["voter_group_code"] == $votergroup_code_var);
-                                }, false);
-                                if (($exists == false) && ($exists_in_array == false)) {
-                                    $leaderarray_to_insert[$counter_leader]["profile_code"] = $profiles_ids_array[$data[$counter][$leader_index]];
-                                    $leaderarray_to_insert[$counter_leader]["voter_group_code"] = $votergroup_code_var;
-                                    $leaderarray_to_insert[$counter_leader]["election_code"] = $election_code_var;
-                                    $counter_leader++;
+                                $leader_prf_code = $profiles_ids_array[$leader_name] ?? profiles::where('full_name', $leader_name)->value('profile_code');
+                                if ($leader_prf_code) {
+                                    $exists = Leader::where([
+                                        'profile_code' => $leader_prf_code,
+                                        'election_code' => $election_code_var, 'voter_group_code' => $votergroup_code_var
+                                    ])->exists();
+                                    $exists_in_array = array_reduce($leaderarray_to_insert, function ($carry, $item) use ($leader_prf_code, $election_code_var, $votergroup_code_var) {
+                                        return $carry || ($item["profile_code"] == $leader_prf_code && $item["election_code"] == $election_code_var && $item["voter_group_code"] == $votergroup_code_var);
+                                    }, false);
+                                    if (($exists == false) && ($exists_in_array == false)) {
+                                        $leaderarray_to_insert[$counter_leader]["profile_code"] = $leader_prf_code;
+                                        $leaderarray_to_insert[$counter_leader]["voter_group_code"] = $votergroup_code_var;
+                                        $leaderarray_to_insert[$counter_leader]["election_code"] = $election_code_var;
+                                        $counter_leader++;
+                                    }
                                 }
                                 $old_leader_name = $leader_name;
                             }
-                            $exists = leadervoterrelation::where([
-                                'leader_profile_code' => $leader_prf_code,
-                                'election_code' => $election_code_var, 'voter_group_code' => $votergroup_code_var,
-                                'voter_profile_code' => $profile_code_var
-                            ])->exists();
-                            $exists_in_array = array_reduce($leadervoter_rel_array_to_insert, function ($carry, $item) use ($leader_prf_code, $election_code_var, $votergroup_code_var, $profile_code_var) {
-                                return $carry || ($item["leader_profile_code"] == $leader_prf_code && $item["election_code"] == $election_code_var && $item["voter_group_code"] == $votergroup_code_var && $item["voter_profile_code"] == $profile_code_var);
-                            }, false);
-                            if (($exists == false) && ($exists_in_array == false)) {
-                                $leadervoter_rel_array_to_insert[$counter_leader]["leader_profile_code"] = $profiles_ids_array[$data[$counter][$leader_index]];
-                                $leadervoter_rel_array_to_insert[$counter_leader]["voter_group_code"] = $votergroup_code_var;
-                                $leadervoter_rel_array_to_insert[$counter_leader]["election_code"] = $election_code_var;
-                                $leadervoter_rel_array_to_insert[$counter_leader]["voter_profile_code"] = $profile_code_var;
-                                $counter_leader++;
+                            if ($leader_prf_code) {
+                                $exists = leadervoterrelation::where([
+                                    'leader_profile_code' => $leader_prf_code,
+                                    'election_code' => $election_code_var, 'voter_group_code' => $votergroup_code_var,
+                                    'voter_profile_code' => $profile_code_var
+                                ])->exists();
+                                $exists_in_array = array_reduce($leadervoter_rel_array_to_insert, function ($carry, $item) use ($leader_prf_code, $election_code_var, $votergroup_code_var, $profile_code_var) {
+                                    return $carry || ($item["leader_profile_code"] == $leader_prf_code && $item["election_code"] == $election_code_var && $item["voter_group_code"] == $votergroup_code_var && $item["voter_profile_code"] == $profile_code_var);
+                                }, false);
+                                if (($exists == false) && ($exists_in_array == false)) {
+                                    $leadervoter_rel_array_to_insert[$counter_leader]["leader_profile_code"] = $leader_prf_code;
+                                    $leadervoter_rel_array_to_insert[$counter_leader]["voter_group_code"] = $votergroup_code_var;
+                                    $leadervoter_rel_array_to_insert[$counter_leader]["election_code"] = $election_code_var;
+                                    $leadervoter_rel_array_to_insert[$counter_leader]["voter_profile_code"] = $profile_code_var;
+                                    $counter_leader++;
+                                }
                             }
                         }
                         //==============add voters
@@ -478,40 +536,40 @@ class UsersController extends Controller
                     }
                     $counter++;
                 }
-                if (isset($array_to_insert)) {
+                if (!empty($array_to_insert)) {
                     $profile_var->insert($array_to_insert);
                 }
-                if (isset($electionarray_to_insert)) {
+                if (!empty($electionarray_to_insert)) {
                     $election_var->insert($electionarray_to_insert);
                 }
-                if (isset($electionroundsarray_to_insert)) {
+                if (!empty($electionroundsarray_to_insert)) {
                     $electionround->insert($electionroundsarray_to_insert);
                 }
-                if (isset($candidategrouparray_to_insert)) {
+                if (!empty($candidategrouparray_to_insert)) {
                     $candidategroup_var->insert($candidategrouparray_to_insert);
                 }
-                if (isset($votergrouparray_to_insert)) {
+                if (!empty($votergrouparray_to_insert)) {
                     $votergroup_var->insert($votergrouparray_to_insert);
                 }
-                if (isset($candidatearray_to_insert)) {
+                if (!empty($candidatearray_to_insert)) {
                     $candidate_var->insert($candidatearray_to_insert);
                 }
-                if (isset($votersarray_to_insert)) {
+                if (!empty($votersarray_to_insert)) {
                     $voter_var->insert($votersarray_to_insert);
                 }
-                if (isset($leaderarray_to_insert)) {
+                if (!empty($leaderarray_to_insert)) {
                     $leader_var->insert($leaderarray_to_insert);
                 }
-                if (isset($leadervoter_rel_array_to_insert)) {
+                if (!empty($leadervoter_rel_array_to_insert)) {
                     $leadervoterrelation->insert($leadervoter_rel_array_to_insert);
                 }
                 DB::commit();
-                DB::unprepared('UNLOCK TABLES');
                 //return 1;
             } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
-                //return $e;
+                if (DB::transactionLevel() > 0) {
+                    DB::rollBack();
+                }
+                return response()->json(['message' => $e->getMessage()], 500);
             }
         }
         //====================================
@@ -680,6 +738,50 @@ class UsersController extends Controller
             ]);
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    private function findPendingImportValue(array $rows, array $conditions, string $returnKey)
+    {
+        foreach ($rows as $row) {
+            $matched = true;
+            foreach ($conditions as $key => $value) {
+                if (($row[$key] ?? null) != $value) {
+                    $matched = false;
+                    break;
+                }
+            }
+
+            if ($matched) {
+                return $row[$returnKey] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    private function clearUsersExcelImportData(): void
+    {
+        $tables = [
+            'vote_detail',
+            'vote_master',
+            'event_table',
+            'leader_voter_rel',
+            'leaders',
+            'voters',
+            'candidates',
+            'voters_group',
+            'candidates_groups',
+            'election_rounds',
+            'users',
+            'admins',
+            'profiles_infos',
+            'elections',
+            'profiles',
+        ];
+
+        foreach ($tables as $table) {
+            DB::table($table)->delete();
         }
     }
 

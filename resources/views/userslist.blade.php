@@ -725,7 +725,12 @@
           document.getElementById('progress-text').innerText = countervar + '%';
         }
       }).then(() => window.location.reload())
-        .catch(error => { alert(JSON.stringify(error.response)); document.getElementById('progress').style.display = 'none'; });
+        .catch(error => {
+          document.getElementById('progress').style.display = 'none';
+          var errMsg = (error.response && error.response.data && error.response.data.message)
+            ? error.response.data.message : 'حدث خطأ أثناء الاستيراد';
+          showalert(errMsg, 2, 6000);
+        });
     }
   });
 

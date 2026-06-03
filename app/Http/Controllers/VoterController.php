@@ -398,10 +398,10 @@ class VoterController extends Controller
             ->where('round_number', $active_round_number)
             ->groupBy('user_code');
 
-        $candidates_status = DB::table('candidates')
-            ->join('profiles', 'profiles.profile_code', '=', 'candidates.profile_code')
+        $voters_status = DB::table('voters')
+            ->join('profiles', 'profiles.profile_code', '=', 'voters.profile_code')
             ->leftJoin('users', function ($join) use ($eleccode) {
-                $join->on('users.profile_code', '=', 'candidates.profile_code')
+                $join->on('users.profile_code', '=', 'voters.profile_code')
                     ->where('users.election_code', '=', $eleccode);
             })
             ->leftJoinSub($logged_users, 'logged_users', function ($join) {
@@ -411,32 +411,39 @@ class VoterController extends Controller
                 $join->on('voted_users.user_code', '=', 'users.user_code');
             })
             ->leftJoin('leader_voter_rel', function ($join) use ($eleccode) {
-                $join->on('leader_voter_rel.voter_profile_code', '=', 'candidates.profile_code')
+                $join->on('leader_voter_rel.voter_profile_code', '=', 'voters.profile_code')
                     ->where('leader_voter_rel.election_code', '=', $eleccode);
             })
             ->leftJoin('profiles as leader_profiles', 'leader_profiles.profile_code', '=', 'leader_voter_rel.leader_profile_code')
+            ->leftJoin('users as leader_users', function ($join) use ($eleccode) {
+                $join->on('leader_users.profile_code', '=', 'leader_voter_rel.leader_profile_code')
+                    ->where('leader_users.election_code', '=', $eleccode);
+            })
             ->select(
-                'profiles.full_name as candidate_name',
+                'profiles.full_name as voter_name',
                 'profiles.profile_code',
+                'profiles.isconnected',
                 DB::raw("IFNULL(users.user_code, '') as usercode"),
                 DB::raw("IFNULL(leader_profiles.full_name, '') as leader_name"),
+                DB::raw("IFNULL(leader_users.user_code, '') as leader_usercode"),
                 DB::raw("CASE WHEN logged_users.user_code IS NULL THEN 'كلا' ELSE 'نعم' END as loggedin"),
                 DB::raw("CASE WHEN voted_users.user_code IS NULL THEN 'كلا' ELSE 'نعم' END as votestatus")
             )
-            ->where('candidates.elections_code', $eleccode)
-            ->where('candidates.round_number', $active_round_number)
+            ->where('voters.election_code', $eleccode)
             ->groupBy(
                 'profiles.full_name',
                 'profiles.profile_code',
+                'profiles.isconnected',
                 'users.user_code',
                 'leader_profiles.full_name',
+                'leader_users.user_code',
                 'logged_users.user_code',
                 'voted_users.user_code'
             )
             ->orderBy('profiles.full_name')
             ->get();
 
-        return json_encode($candidates_status);
+        return json_encode($voters_status);
     }
 
     public function getvoterstatus($usercode, $electioncode, $round_count)

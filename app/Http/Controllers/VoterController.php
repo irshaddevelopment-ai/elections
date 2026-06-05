@@ -322,6 +322,14 @@ class VoterController extends Controller
     {
         $logged_user_code = session("guest_usercode", "");
         $user = users::where('user_code', $logged_user_code)->first();
+        $round_number = ElectionRound::where('election_code', $eleccode)
+            ->where('round_status', 1)
+            ->value('round_number');
+        if (!isset($round_number)) {
+            $round_number = ElectionRound::where('election_code', $eleccode)
+                ->orderByDesc('round_number')
+                ->value('round_number');
+        }
         $profiles = DB::select("
     SELECT full_name, profiles.profile_code, isconnected, IFNULL(mobile, '') AS mobile
     FROM profiles, leader_voter_rel 
@@ -336,16 +344,18 @@ class VoterController extends Controller
                 ->get()->first();
             $voter_user_code = isset($voter_user->user_code) ? $voter_user->user_code : '';
             $events_login = null;
-            $events_vote = null;
+            $has_voted = false;
             if ($voter_user_code != '') {
                 $events_login = EventTable::where('user_code', $voter_user_code)
                     ->whereDate('created_at', $datevar)
                     ->where('event_description', 'login')
                     ->get()->last();
-                $events_vote = EventTable::where('user_code', $voter_user_code)
-                    ->whereDate('created_at', $datevar)
-                    ->where('event_description', 'vote')
-                    ->get()->last();
+                $has_voted = Votemaster::where('user_code', $voter_user_code)
+                    ->where('election_code', $eleccode)
+                    ->when(isset($round_number), function ($query) use ($round_number) {
+                        return $query->where('round_number', $round_number);
+                    })
+                    ->exists();
             }
             $data[$index]['profile_code'] = $profile->profile_code;
             $data[$index]['voter_name'] = $profile->full_name;
@@ -362,15 +372,7 @@ class VoterController extends Controller
             } else {
                 $data[$index]['loggedin'] = "كلا";
             }
-            if (isset($events_vote)) {
-                if ($events_vote->event_description == "vote") {
-                    $data[$index]['votestatus'] = "نعم";
-                } else {
-                    $data[$index]['votestatus'] = "كلا";
-                }
-            } else {
-                $data[$index]['votestatus'] = "كلا";
-            }
+            $data[$index]['votestatus'] = $has_voted ? "نعم" : "كلا";
         }
         return $data;
     }

@@ -159,6 +159,31 @@
     .btn-modal-secondary:hover { background: #f8f4e8; border-color: rgba(212,168,32,0.4); }
     .btn-modal-primary { height: 38px; padding: 0 1.1rem; border-radius: .55rem; font-size: .88rem; font-weight: 700; background: linear-gradient(135deg, #c8920a, #f0c94d, #c8920a); background-size: 200%; border: none; color: #1a2e0f; cursor: pointer; box-shadow: 0 2px 10px rgba(212,168,32,0.3); display: inline-flex; align-items: center; gap: .4rem; }
     .btn-modal-primary:hover { box-shadow: 0 4px 14px rgba(212,168,32,0.45); }
+    .vote-warning-box {
+      background: linear-gradient(135deg, #fff8df, #fff);
+      border: 1px solid rgba(212,168,32,0.35);
+      border-radius: .85rem;
+      padding: 1rem;
+      color: #1e3a70;
+    }
+    .vote-warning-icon {
+      width: 46px; height: 46px; border-radius: 50%;
+      background: rgba(212,168,32,0.16);
+      color: #c8920a;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 1.15rem;
+      margin-bottom: .7rem;
+    }
+    .empty-lists-wrap { display: flex; gap: .45rem; flex-wrap: wrap; justify-content: center; margin-top: .85rem; }
+    .empty-list-pill {
+      border: 1px solid rgba(212,168,32,0.36);
+      background: #fff;
+      color: #1e3a70;
+      border-radius: 999px;
+      padding: .28rem .75rem;
+      font-size: .84rem;
+      font-weight: 700;
+    }
 
     /* ── ID Card extras ── */
     .btn-circle { width: 34px; height: 34px; border-radius: 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; }
@@ -247,7 +272,7 @@
             @if(!$any_results_exist) لم تصدر النتائج بعد @else النتائج @endif
           </button>
           @if(!$isvotedbefore)
-          <button class="btn-g-primary" id="btn_vote" onclick="showsubmitmodal();">
+          <button class="btn-g-primary" id="btn_vote" onclick="requestVoteSubmit();">
             <i class="fas fa-check-square"></i> تصويت
           </button>
           @endif
@@ -397,6 +422,32 @@
           <i class="fas fa-vote-yea"></i> تصويت
         </button>
         @endif
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Empty lists confirmation modal --}}
+<div class="modal fade gm-modal" id="empty_lists_confirm_modal" tabindex="-1" aria-hidden="true" dir="rtl">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-triangle-exclamation me-2"></i> تأكيد التصويت</h5>
+        <button type="button" class="close ms-auto" data-bs-dismiss="modal" aria-label="Close"><span>&times;</span></button>
+      </div>
+      <div class="modal-body text-center">
+        <div class="vote-warning-box">
+          <span class="vote-warning-icon"><i class="fas fa-list-check"></i></span>
+          <div class="fw-bold mb-2">لم يتم اختيار أي مرشح من بعض اللوائح.</div>
+          <div>هل تريد المتابعة وتأكيد التصويت كما هو؟</div>
+          <div class="empty-lists-wrap" id="empty_lists_names"></div>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn-modal-secondary" data-bs-dismiss="modal">عودة للاختيار</button>
+        <button type="button" class="btn-modal-primary" onclick="continueVoteWithEmptyLists();">
+          <i class="fas fa-check"></i> متابعة التصويت
+        </button>
       </div>
     </div>
   </div>
@@ -948,6 +999,50 @@
     return count;
   }
 
+  function getEmptyVoteListNames() {
+    var emptyLists = [];
+    $('#dtcandidateslist tbody tr').each(function() {
+      var selectedCount = parseInt($(this).find('th').eq(3).text(), 10) || 0;
+      if (selectedCount === 0) {
+        emptyLists.push($(this).find('th').eq(0).text().trim());
+      }
+    });
+    return emptyLists;
+  }
+
+  function canStartVoteFlow() {
+    var electionStatus = "{{$count_round_status}}";
+    if (electionStatus == 0) {
+      createAlert('', 'هذه العملية ليست مطلقة', '', 'danger', true, true, 'pageMessages');
+      return false;
+    }
+    if (electionStatus == 2) {
+      createAlert('', 'الجولة الانتخابية غير نشطة', '', 'danger', true, true, 'pageMessages');
+      return false;
+    }
+    return true;
+  }
+
+  function requestVoteSubmit() {
+    if (!canStartVoteFlow()) return;
+    var emptyLists = getEmptyVoteListNames();
+    if (emptyLists.length > 0) {
+      var $emptyListsNames = $('#empty_lists_names').empty();
+      emptyLists.forEach(function(listName) {
+        $('<span />', { class: 'empty-list-pill', text: listName }).appendTo($emptyListsNames);
+      });
+      new bootstrap.Modal(document.getElementById('empty_lists_confirm_modal')).show();
+      return;
+    }
+    showsubmitmodal();
+  }
+
+  function continueVoteWithEmptyLists() {
+    bootstrap.Modal.getInstance(document.getElementById('empty_lists_confirm_modal'))?.hide();
+    if (!canStartVoteFlow()) return;
+    showsubmitmodal();
+  }
+
   function showsubmitmodal() {
     $('#datatable_vote_modal tbody').empty();
     showOverlay();
@@ -999,6 +1094,8 @@
           
           if (election_status == 0) {
             createAlert('', 'هذه العملية ليست مطلقة', '', 'danger', true, true, 'pageMessages');
+          } else if (election_status == 2) {
+            createAlert('', 'الجولة الانتخابية غير نشطة', '', 'danger', true, true, 'pageMessages');
           } else {
             fetch('/savevote', {
               method: 'POST',

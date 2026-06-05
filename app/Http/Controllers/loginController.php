@@ -62,7 +62,15 @@ class loginController extends Controller
                     session(['profile_code' => $user->profile_code]);
                     $election_type = Election::where('election_code', $user->election_code)->value('election_type');
                     if ($election_type == 2) {
-                        $count_round_row = ElectionRound::where('round_status', '!=', 2)->first();
+                        $count_round_row = ElectionRound::where('election_code', $user->election_code)
+                            ->where('round_status', '!=', 2)
+                            ->orderBy('round_number')
+                            ->first();
+                        if (!isset($count_round_row)) {
+                            $count_round_row = ElectionRound::where('election_code', $user->election_code)
+                                ->orderByDesc('round_number')
+                                ->first();
+                        }
                         if(isset($count_round_row)){
                         $count_round = $count_round_row->round_number;
                         $count_round_status = $count_round_row->round_status;

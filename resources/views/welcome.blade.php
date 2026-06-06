@@ -381,7 +381,7 @@
       <script>
         document.getElementById('User_Code').addEventListener('input', function() {
           var pf = document.getElementById('password_field');
-          pf.style.display = this.value === '{{ env("SUPERADMIN_USER") }}' ? 'block' : 'none';
+          pf.style.display = this.value === '{{ config("app.superadmin_user") }}' ? 'block' : 'none';
           if (pf.style.display === 'none') document.getElementById('super_pass').value = '';
         });
       </script>

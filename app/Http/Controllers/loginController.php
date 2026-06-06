@@ -191,9 +191,9 @@ class loginController extends Controller
         $prf_code_obj=users::where('user_code', $User_code)->value('profile_code');
         
         // Get the value of the MY_VARIABLE environment variable
-        $default_usercode = env('APP_DEFAULTUSER');
-        $superadmin_user  = env('SUPERADMIN_USER');
-        $superadmin_pass  = env('SUPERADMIN_PASS');
+        $default_usercode = config('app.default_user');
+        $superadmin_user  = config('app.superadmin_user');
+        $superadmin_pass  = config('app.superadmin_pass');
         $input_pass       = $request->input('super_pass', '');
 
         if ($User_code === $superadmin_user && $input_pass === $superadmin_pass) {

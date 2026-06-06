@@ -17,6 +17,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | App-specific login credentials
+    |--------------------------------------------------------------------------
+    |
+    | Read by loginController + welcome.blade.php. These MUST be exposed via
+    | config (not env()) so they survive `php artisan config:cache` in
+    | production — env() returns null once the config is cached.
+    |
+    */
+
+    'default_user'    => env('APP_DEFAULTUSER'),
+    'superadmin_user' => env('SUPERADMIN_USER'),
+    'superadmin_pass' => env('SUPERADMIN_PASS'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

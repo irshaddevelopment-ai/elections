@@ -3,3 +3,8 @@ node_modules/
 dist
 build
 
+# RoadRunner config — Laravel Octane generates its own correct config at runtime.
+# A committed .rr.yaml previously pointed workers at the non-existent `octane:worker`
+# command, crashing every worker with "Network: EOF". Keep it out of the repo.
+.rr.yaml
+

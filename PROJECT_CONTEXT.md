@@ -213,3 +213,72 @@ Endpoints variously return HTML (Blade views), `json_encode($data)` strings, raw
 8. **Tests**: PHPUnit is configured but the suite is empty beyond defaults. Run `vendor/bin/phpunit` to verify nothing is broken; add Feature tests for new controllers.
 9. **Linting**: `vendor/bin/pint` will auto-format to Laravel style.
 10. **Deploy / serve**: target machine needs PHP 8.2+, MySQL 8, RoadRunner (`rr` binary committed at repo root works on Windows x64; bring your own for Linux). RoadRunner serves both PHP and static files from `public/`.
+
+## Production Deployment (DigitalOcean)
+
+The app is deployed on a DigitalOcean droplet at `https://elections-vote.duckdns.org`. Full step-by-step runbook lives in [deploy/DEPLOYMENT.html](deploy/DEPLOYMENT.html) (open in a browser for the nicely-formatted version).
+
+### Phase 1 — Small test droplet (~$18/mo, 20 users)
+
+| Component | Choice | Why |
+|---|---|---|
+| Provider | DigitalOcean | Cheap, predictable, easy snapshots |
+| Droplet | `s-2vcpu-2gb-amd` (Premium AMD, NVMe) | ~$18/mo, fits the 20-user test |
+| OS | Ubuntu 22.04 LTS | Most stable for PHP stack |
+| Region | Frankfurt (`FRA1`) | Lowest latency for Middle East users |
+| Domain | `elections-vote.duckdns.org` (free DuckDNS) | No need to buy a domain; HTTPS works |
+| TLS | Let's Encrypt via certbot | Free, auto-renews every 60 days |
+| Web server | Nginx (reverse proxy on :80/:443) | Light memory footprint vs Apache |
+| App server | Laravel Octane + RoadRunner (6 workers) | Multi-process, persistent app state |
+| Database | MySQL 8 (local, tuned for 2 GB) | Native fit for app's existing schema |
+| Sessions | Redis | Faster than DB sessions under load |
+| Auto-start | systemd service `elections-octane` | Survives reboots and crashes |
+
+### Phase 2 — Scale up for the real event (~$84/mo, 500 users)
+
+Same droplet, **vertical resize only** (~5 min downtime, same IP, same TLS cert, same data):
+- Resize: `s-2vcpu-2gb-amd` → `g-4vcpu-16gb` (General Purpose)
+- Bump RoadRunner workers: `6 → 16`
+- Bump MySQL `innodb_buffer_pool_size`: `512M → 4G`
+- Bump MySQL `max_connections`: `50 → 200`
+
+### Phase 3 — Return to small after the event
+
+Reverse Phase 2: snapshot the event-state, resize back to `s-2vcpu-2gb-amd`, bring buffer/workers back to Phase 1 values. Cost drops to $18/mo immediately.
+
+### Bugs encountered during initial deploy (and lessons)
+
+The deployment took longer than expected because of three stacked bugs that masked each other:
+
+1. **Trailing `#` comments in `.env` corrupted the parser** — PHP dotenv handled trailing comments inconsistently for lines ending in `=` (base64 padding). Fix: never put comments on the same line as a value in `.env`.
+2. **Stale `artisan serve` processes** — `pkill -f 'artisan serve'` did not match the running process, so every "restart" silently failed and `curl` kept hitting the old broken process. Fix: always use `fuser -k 8001/tcp` to kill by port.
+3. **Shell env var pollution through sudo** — An earlier `export APP_KEY=...` persisted as an empty string through `sudo` and overrode `.env` values. Fix: always open a fresh SSH session before `config:cache`, and **never use `env()` outside `config/*.php` files** — use `config('app.foo')` instead.
+
+Other deployment-specific findings:
+
+- The dump file `final.sql` contains `DEFINER=root@...` clauses that need MySQL `SUPER` privilege. Load it as `sudo mysql election < final.sql` (root via socket auth), then let the app connect as `elections_app`.
+- The `rr` binary committed at the repo root turned out to be Linux-compatible (not Windows-only as PROJECT_CONTEXT.md previously claimed). The `chmod +x rr` was the only step needed.
+- Laravel Octane 2.x does not expose an `octane:worker` command. Use `php artisan octane:start --server=roadrunner --workers=N`; Octane internally manages RoadRunner. Custom `.rr.yaml` files referencing `octane:worker` will silently kill workers with `Network: EOF`.
+- The login flow + welcome page originally called `env('SUPERADMIN_USER')` directly from the controller and the Blade view. With `config:cache` enabled (the production default), those calls return `null`. Added `config('app.default_user')`, `config('app.superadmin_user')`, `config('app.superadmin_pass')` to [config/app.php](config/app.php) and updated the call sites.
+
+### Outage post-mortem — 2026-06-06 (HTTP 500/502)
+
+A deploy took the live site down for hours. **Three stacked bugs**, fixed in order — keep this runbook for next time:
+
+1. **`.rr.yaml` killed every worker.** The committed `.rr.yaml` set `server.command` to `php artisan octane:worker`, which does not exist in Octane 2.x → workers died instantly with `sync_worker_receive_frame: Network: EOF` (generic, unhelpful). **Fix:** remove `.rr.yaml`; `octane:start --server=roadrunner` regenerates a correct one itself (worker command becomes `vendor/bin/roadrunner-worker`). This file is still git-tracked and should be untracked + gitignored so a merge can't reintroduce it.
+2. **Root-owned cache/log files hid the real error.** Running `artisan`/`config:cache` as `root` left `storage/logs/*` and `bootstrap/cache/*` owned by `root`; the `www-data` worker then couldn't write logs, so the true exception never surfaced. **Fix:** `sudo chown -R www-data:www-data storage bootstrap/cache`, and **always run artisan as `www-data` on the server** (`sudo -u www-data php artisan ...`).
+3. **ROOT CAUSE — the app reads `.env.production`, not `.env`.** Because `APP_ENV=production`, Laravel loads **`.env.production`**. That file was an unfilled template (empty `APP_KEY`, `CHANGE_ME` placeholders) → `MissingAppKeyException` on every request. Every `key:generate`/edit had gone into `.env`, which production ignores. Diagnostic tell: `php artisan tinker` read `.env` (full key) while HTTP and `config:cache` read `.env.production` (empty). **Fix:** populate `.env.production` with the real values, then `sudo -u www-data php artisan config:cache`, then restart Octane.
+
+**Health checks (run on the server):**
+```bash
+systemctl is-active elections-octane          # active
+pgrep -fc roadrunner-worker                    # 6  (NOT `pgrep -fc octane`; workers are named roadrunner-worker)
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/   # 200
+```
+
+**NEVER `git commit`/`push` from the server.** Its `git status` is intentionally messy and committing it is destructive:
+- `.env.production` holds real secrets → committing leaks DB password / `APP_KEY` / superadmin pass.
+- `.rr.yaml` and `rr` are runtime-generated.
+- Hundreds of `deleted: vendor/...` come from `composer install --no-dev` (production drops faker/phpunit/whoops/pint). `vendor/` is wrongly git-tracked; committing would delete dev tooling from history.
+
+Code flows **local → `git push` → server `git pull`** only. The server runs code; it is never where you author or commit it. Pending cleanup (do locally): untrack `vendor/`, `.env.production`, `.rr.yaml`; ship a `.env.production.example` template with placeholders.

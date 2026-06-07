@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elections – DigitalOcean Deployment Runbook</title>
+<style>
+  :root {
+    --bg:#f7fafc; --card:#fff; --ink:#1a202c; --muted:#4a5568;
+    --line:#e2e8f0; --code-bg:#1a202c; --code-ink:#edf2f7;
+    --p1:#3182ce; --p2:#d69e2e; --p3:#38a169;
+    --warn-bg:#fffaf0; --warn-line:#dd6b20;
+    --tip-bg:#ebf8ff;  --tip-line:#3182ce;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--ink);padding:2rem 1rem}
+  .wrap{max-width:980px;margin:0 auto}
+  header{margin-bottom:2rem}
+  h1{font-size:2rem;margin:0 0 .25rem}
+  .sub{color:var(--muted)}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:.6rem;
+          padding:1rem 1.25rem;margin:1rem 0 2rem}
+  nav.toc ol{margin:0;padding-left:1.25rem}
+  nav.toc a{color:var(--p1);text-decoration:none}
+  nav.toc a:hover{text-decoration:underline}
+  section.phase{background:var(--card);border:1px solid var(--line);border-radius:.6rem;
+                padding:1.25rem 1.5rem;margin-bottom:1.75rem;border-left:6px solid var(--p1)}
+  section.phase.p2{border-left-color:var(--p2)}
+  section.phase.p3{border-left-color:var(--p3)}
+  section.phase > h2{margin-top:0;display:flex;align-items:center;gap:.6rem}
+  .badge{display:inline-block;background:var(--p1);color:#fff;font-size:.75rem;
+         padding:.18rem .55rem;border-radius:.35rem;font-weight:600;letter-spacing:.04em}
+  .badge.p2{background:var(--p2)}
+  .badge.p3{background:var(--p3)}
+  .meta{color:var(--muted);font-size:.9rem;margin-top:-.35rem;margin-bottom:.9rem}
+  h3{margin:1.4rem 0 .55rem;font-size:1.08rem}
+  h4{margin:1rem 0 .35rem;font-size:.98rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  p{margin:.4rem 0 .8rem}
+  ul,ol{margin:.4rem 0 .9rem;padding-left:1.4rem}
+  li{margin:.18rem 0}
+  code{font-family:ui-monospace,SF Mono,Menlo,Consolas,monospace;font-size:.92em;
+       background:#edf2f7;padding:.08rem .35rem;border-radius:.25rem}
+  pre{background:var(--code-bg);color:var(--code-ink);padding:.85rem 1rem;
+      border-radius:.4rem;overflow-x:auto;font-size:.88rem;line-height:1.5}
+  pre code{background:transparent;color:inherit;padding:0;font-size:1em}
+  table{width:100%;border-collapse:collapse;margin:.7rem 0 1.2rem;font-size:.92em}
+  th,td{text-align:left;padding:.5rem .65rem;border:1px solid var(--line);vertical-align:top}
+  th{background:#f1f5f9}
+  .warn{background:var(--warn-bg);border-left:4px solid var(--warn-line);
+        padding:.7rem 1rem;border-radius:.3rem;margin:.8rem 0}
+  .tip{background:var(--tip-bg);border-left:4px solid var(--tip-line);
+       padding:.7rem 1rem;border-radius:.3rem;margin:.8rem 0}
+  .step{background:#fafbff;border:1px solid var(--line);border-radius:.4rem;
+        padding:.85rem 1rem;margin:.6rem 0}
+  .step > .num{display:inline-block;background:var(--p1);color:#fff;border-radius:50%;
+               width:1.6rem;height:1.6rem;line-height:1.6rem;text-align:center;
+               font-weight:600;font-size:.85rem;margin-right:.5rem}
+  .p2 .step > .num{background:var(--p2)}
+  .p3 .step > .num{background:var(--p3)}
+  footer{text-align:center;color:var(--muted);font-size:.85em;margin:2rem 0 0}
+  .kbd{font-family:monospace;background:#fff;border:1px solid var(--line);
+       border-bottom-width:2px;border-radius:.25rem;padding:.05rem .35rem;font-size:.85em}
+  .price{font-weight:600;color:var(--p2)}
+  details summary{cursor:pointer;font-weight:600;margin:.4rem 0}
+  details > pre{margin-top:.4rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Elections — Deployment Runbook</h1>
+    <p class="sub">Production deployment on DigitalOcean. Three phases: stand up a small test droplet, scale up for the event, scale back down after.</p>
+  </header>
+
+  <nav class="toc">
+    <strong>Contents</strong>
+    <ol>
+      <li><a href="#prereqs">Prerequisites</a></li>
+      <li><a href="#phase1">Phase 1 — Small test droplet (~$18/mo, 20 users)</a></li>
+      <li><a href="#phase2">Phase 2 — Scale up for the event (~$84/mo, 500 users)</a></li>
+      <li><a href="#phase3">Phase 3 — Return to small after the event ($18/mo)</a></li>
+      <li><a href="#monitoring">Monitoring during the event</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================================================================== -->
+  <section id="prereqs">
+    <h2>Prerequisites</h2>
+    <p>Before you start Phase 1, have these ready:</p>
+    <ul>
+      <li><strong>Code on GitHub</strong> — the droplet pulls from a git remote</li>
+      <li><strong>DigitalOcean account</strong> with payment method on file and SSH public key uploaded</li>
+      <li><strong>Free domain</strong> from <a href="https://www.duckdns.org" target="_blank">DuckDNS</a> (e.g. <code>yourname.duckdns.org</code>) — needed for HTTPS</li>
+      <li><strong>Values for <code>.env</code>:</strong> generate a strong DB password with <code>openssl rand -base64 24</code>, decide your <code>APP_TIMEZONE</code>, admin credentials</li>
+    </ul>
+    <div class="warn">
+      <strong>Make your GitHub repo private</strong> — the SQL dumps contain personal voter data (names, mobile numbers, addresses).
+    </div>
+  </section>
+
+  <!-- =================================================================== PHASE 1 -->
+  <section id="phase1" class="phase">
+    <h2><span class="badge">Phase 1</span> Small test droplet — 20 users</h2>
+    <p class="meta">Goal: full production stack on a cheap droplet (<span class="price">~$18/mo</span>) for the 20-user trial. ~60 minutes total.</p>
+
+    <h3>1.1 Create the droplet</h3>
+    <div class="step">
+      <span class="num">1</span>DigitalOcean → <strong>Create → Droplets</strong><br>
+      <strong>Region:</strong> Frankfurt (FRA1) · <strong>OS:</strong> Ubuntu 22.04 LTS · <strong>Type:</strong> Basic → Premium AMD<br>
+      <strong>Size:</strong> <code>s-2vcpu-2gb-amd</code> (2 vCPU / 2 GB / 60 GB SSD) — <span class="price">~$18/mo</span><br>
+      <strong>Auth:</strong> SSH Key · <strong>Hostname:</strong> <code>elections-test</code> · <strong>Monitoring:</strong> ON
+    </div>
+    <div class="step">
+      <span class="num">2</span>Copy the public IPv4 once it shows <em>Active</em>.<br>
+      SSH in: <pre><code>ssh root@&lt;your-ip&gt;</code></pre>
+    </div>
+
+    <h3>1.2 Install system packages</h3>
+    <div class="warn">
+      During <code>apt upgrade</code> you may see SSH/network config prompts. Always pick <strong>"keep the local version currently installed"</strong> for sshd — otherwise you can lock yourself out.
+    </div>
+    <pre><code>apt update && apt upgrade -y
+
+# PHP 8.2 PPA + all needed extensions + system services
+apt install -y software-properties-common
+add-apt-repository -y ppa:ondrej/php
+apt update
+apt install -y nginx mysql-server redis-server \
+  php8.2-cli php8.2-fpm php8.2-mysql php8.2-redis \
+  php8.2-xml php8.2-mbstring php8.2-curl php8.2-zip \
+  php8.2-gd php8.2-bcmath php8.2-intl php8.2-sockets \
+  unzip git ufw
+
+# Composer (don't apt install composer — it's outdated)
+cd /tmp && curl -sS https://getcomposer.org/installer -o composer-setup.php
+php composer-setup.php && mv composer.phar /usr/local/bin/composer
+chmod +x /usr/local/bin/composer && rm composer-setup.php</code></pre>
+
+    <h3>1.3 MySQL setup</h3>
+    <pre><code># Generate a strong password and save it in your password manager
+DB_PASS=$(openssl rand -base64 24)
+echo "DB password: $DB_PASS"
+
+# Create DB + app user (replace YOUR_DB_PASS with the value above)
+sudo mysql <<SQL
+CREATE DATABASE IF NOT EXISTS election
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'elections_app'@'localhost' IDENTIFIED BY 'YOUR_DB_PASS';
+GRANT ALL PRIVILEGES ON election.* TO 'elections_app'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+
+# Drop in the Phase 1 tuning (sized for 2 GB)
+cat > /etc/mysql/mysql.conf.d/elections.cnf <<'EOF'
+[mysqld]
+max_connections          = 50
+wait_timeout             = 600
+innodb_buffer_pool_size  = 512M
+innodb_buffer_pool_instances = 1
+innodb_log_file_size     = 128M
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method      = O_DIRECT
+innodb_file_per_table    = 1
+innodb_lock_wait_timeout = 30
+table_open_cache         = 2000
+open_files_limit         = 65535
+max_allowed_packet       = 64M
+character-set-server     = utf8mb4
+collation-server         = utf8mb4_unicode_ci
+sql_mode                 = "NO_ENGINE_SUBSTITUTION"
+slow_query_log           = 1
+slow_query_log_file      = /var/log/mysql/slow.log
+long_query_time          = 1
+EOF
+systemctl restart mysql</code></pre>
+
+    <h3>1.4 Deploy the app</h3>
+    <pre><code>mkdir -p /var/www && cd /var/www
+git clone https://github.com/YOUR_USER/elections.git
+cd elections
+
+composer install --no-dev --optimize-autoloader
+
+# Copy the production env template
+cp .env.production .env
+nano .env   # fill in DB_PASSWORD, APP_TIMEZONE, SUPERADMIN_USER, SUPERADMIN_PASS, etc.</code></pre>
+    <div class="warn">
+      <strong>Never put trailing <code>#</code> comments on the same line as a value in <code>.env</code></strong>. PHP dotenv handles them inconsistently for base64-padded values like <code>APP_KEY</code>. Clean them with:
+      <pre><code>sed -i 's/[[:space:]]\+#[[:space:]].*$//' /var/www/elections/.env</code></pre>
+    </div>
+    <pre><code># Generate APP_KEY, prepare storage dirs
+php artisan key:generate --force
+mkdir -p public/uploads public/profile_picture storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
+php artisan storage:link
+
+# Load DB schema (use sudo mysql — dump has DEFINER clauses needing SUPER)
+sudo mysql election < /var/www/elections/final.sql
+
+# Apply the unique-vote constraint migration
+php artisan migrate --path=database/migrations/2026_05_23_211212_add_unique_vote_per_user_round.php --force
+
+# Make www-data own the whole project (simpler for test droplet)
+chown -R www-data:www-data /var/www/elections
+chmod -R g+rwX /var/www/elections</code></pre>
+
+    <h3>1.5 Install Octane and bring it up under systemd</h3>
+    <pre><code># Make the rr binary executable (it's a Linux binary already)
+cd /var/www/elections && chmod +x rr
+
+# Install Octane components (publishes config; answer "no" to "install RR via composer?")
+sudo -u www-data php artisan octane:install --server=roadrunner
+
+# Create the systemd service
+cat > /etc/systemd/system/elections-octane.service <<'EOF'
+[Unit]
+Description=Elections Octane Server (RoadRunner)
+After=network.target mysql.service redis-server.service
+Requires=mysql.service redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/elections
+ExecStart=/usr/bin/php /var/www/elections/artisan octane:start --server=roadrunner --host=0.0.0.0 --port=8000 --workers=6 --max-requests=1000
+ExecReload=/usr/bin/php /var/www/elections/artisan octane:reload
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable elections-octane
+systemctl start elections-octane
+systemctl status elections-octane --no-pager | head -15</code></pre>
+
+    <h3>1.6 Nginx + HTTPS</h3>
+    <p>Sign up at <a href="https://www.duckdns.org" target="_blank">DuckDNS</a>, create a subdomain pointing to the droplet's IP.</p>
+    <pre><code># Remove the default Nginx site
+rm -f /etc/nginx/sites-enabled/default
+
+# Write our site config (replace YOURNAME with your DuckDNS subdomain)
+cat > /etc/nginx/sites-available/elections <<'EOF'
+server {
+    listen 80;
+    server_name YOURNAME.duckdns.org;
+    client_max_body_size 64M;
+
+    access_log /var/log/nginx/elections-access.log;
+    error_log  /var/log/nginx/elections-error.log;
+
+    location /css/      { root /var/www/elections/public; expires 7d; }
+    location /js/       { root /var/www/elections/public; expires 7d; }
+    location /images/   { root /var/www/elections/public; expires 7d; }
+    location /fonts/    { root /var/www/elections/public; expires 30d; }
+    location /uploads/  { root /var/www/elections/public; }
+    location /profile_picture/ { root /var/www/elections/public; }
+    location /storage/  { root /var/www/elections/public; }
+    location /favicon.ico { root /var/www/elections/public; log_not_found off; }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+ln -sf /etc/nginx/sites-available/elections /etc/nginx/sites-enabled/elections
+nginx -t && systemctl reload nginx
+
+# Open firewall (HTTPS-Only mode in browsers will fail without this)
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw --force enable
+
+# Get a TLS certificate
+apt install -y certbot python3-certbot-nginx
+certbot --nginx -d YOURNAME.duckdns.org --non-interactive --agree-tos \
+  --email YOU@example.com --redirect</code></pre>
+
+    <h3>1.7 Final config — point Laravel at the new HTTPS URL</h3>
+    <pre><code># Update .env
+sed -i 's|APP_URL=.*|APP_URL=https://YOURNAME.duckdns.org|' /var/www/elections/.env
+sed -i 's/SESSION_SECURE_COOKIE=false/SESSION_SECURE_COOKIE=true/' /var/www/elections/.env
+
+# Cache config + reload Octane
+cd /var/www/elections
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan view:cache
+systemctl reload elections-octane
+
+# Verify
+curl -sI https://YOURNAME.duckdns.org/</code></pre>
+    <div class="tip">
+      <strong>Open in browser:</strong> <code>https://YOURNAME.duckdns.org/</code> — you should see the login page with logo and styling. Log in with your <code>SUPERADMIN_USER</code> / <code>SUPERADMIN_PASS</code>.
+    </div>
+
+    <h3>1.8 Snapshot the working droplet</h3>
+    <ol>
+      <li>DO panel → your droplet → <strong>Power Off</strong></li>
+      <li>Once status shows OFF, <strong>Snapshots → Take Snapshot</strong> → name it <code>elections-phase1-working</code></li>
+      <li>After ~2 min, <strong>Power On</strong></li>
+    </ol>
+    <p>Snapshot cost: ~<strong>$0.12/month</strong> — your free rollback point.</p>
+  </section>
+
+  <!-- =================================================================== PHASE 2 -->
+  <section id="phase2" class="phase p2">
+    <h2><span class="badge p2">Phase 2</span> Scale up for the event — 500 users</h2>
+    <p class="meta">~24 hours before the event. <span class="price">~$84/mo</span> while large. ~15 minutes total.</p>
+
+    <h3>2.1 Snapshot first (in case anything goes wrong)</h3>
+    <ol>
+      <li>Power off the droplet</li>
+      <li>Take a snapshot named <code>elections-pre-event</code></li>
+      <li>Keep the droplet OFF for the resize step</li>
+    </ol>
+
+    <h3>2.2 Resize the droplet</h3>
+    <div class="step p2">
+      <span class="num">1</span>DO panel → droplet → <strong>Resize</strong><br>
+      Pick <strong>"CPU and RAM only"</strong> (faster, reversible, keeps the disk and IP)<br>
+      Choose <strong>General Purpose</strong> → <code>g-4vcpu-16gb</code> (4 vCPU / 16 GB) — <span class="price">~$84/mo</span>
+    </div>
+    <div class="step p2">
+      <span class="num">2</span>Click <strong>Resize</strong> · wait ~3 min · then <strong>Power On</strong>
+    </div>
+    <div class="tip">
+      The IP, TLS certificate, domain, code, database, and DuckDNS DNS all <strong>stay the same</strong>. Only the box gets bigger.
+    </div>
+
+    <h3>2.3 Re-tune for the bigger machine</h3>
+    <p>SSH in and run these three blocks — bump workers, buffer pool, max connections:</p>
+    <pre><code># 1. Octane workers: 6 → 16
+sed -i 's/--workers=6/--workers=16/' /etc/systemd/system/elections-octane.service
+systemctl daemon-reload
+
+# 2. MySQL buffer pool 512M → 4G, connections 50 → 200
+sed -i 's/innodb_buffer_pool_size  = 512M/innodb_buffer_pool_size  = 4G/' /etc/mysql/mysql.conf.d/elections.cnf
+sed -i 's/max_connections          = 50/max_connections          = 200/' /etc/mysql/mysql.conf.d/elections.cnf
+
+# 3. Restart both services
+systemctl restart mysql
+systemctl restart elections-octane
+
+# Verify
+ps aux | grep octane:worker | wc -l                # expect ~16
+mysql -uroot -e "SHOW VARIABLES LIKE 'max_connections';"
+curl -sI https://YOURNAME.duckdns.org/</code></pre>
+
+    <h3>2.4 Pre-event sanity checklist</h3>
+    <ul>
+      <li>☐ HTTPS still loads, padlock shows green</li>
+      <li>☐ Login as superadmin works</li>
+      <li>☐ Test vote from a voter account writes to <code>vote_master</code></li>
+      <li>☐ <code>systemctl status</code> for nginx, mysql, redis-server, elections-octane all <strong>active (running)</strong></li>
+      <li>☐ <code>df -h /</code> shows &gt;10 GB free</li>
+      <li>☐ <code>ufw status</code> shows only SSH + Nginx Full open</li>
+    </ul>
+  </section>
+
+  <!-- =================================================================== PHASE 3 -->
+  <section id="phase3" class="phase p3">
+    <h2><span class="badge p3">Phase 3</span> Return to small after the event</h2>
+    <p class="meta">Bill drops from <span class="price">~$84/mo back to ~$18/mo</span>. ~15 minutes total.</p>
+
+    <h3>3.1 Snapshot the event-state (for archival)</h3>
+    <pre><code># Backup the database first (timestamped dump)
+sudo mysqldump election > /root/election-$(date +%F).sql
+ls -lh /root/election-*.sql
+
+# Then DO panel: Power Off → Snapshots → Take Snapshot
+# Name it "elections-post-event-YYYYMMDD"</code></pre>
+
+    <h3>3.2 Resize back down</h3>
+    <div class="step p3">
+      <span class="num">1</span>DO panel → droplet → <strong>Resize</strong><br>
+      Pick <strong>"CPU and RAM only"</strong> → <code>s-2vcpu-2gb-amd</code> — back to <span class="price">~$18/mo</span>
+    </div>
+    <div class="step p3">
+      <span class="num">2</span>Wait for resize · Power on
+    </div>
+
+    <h3>3.3 Re-tune for the smaller machine</h3>
+    <pre><code># 1. Octane workers: 16 → 6
+sed -i 's/--workers=16/--workers=6/' /etc/systemd/system/elections-octane.service
+systemctl daemon-reload
+
+# 2. MySQL buffer pool 4G → 512M, connections 200 → 50
+sed -i 's/innodb_buffer_pool_size  = 4G/innodb_buffer_pool_size  = 512M/' /etc/mysql/mysql.conf.d/elections.cnf
+sed -i 's/max_connections          = 200/max_connections          = 50/' /etc/mysql/mysql.conf.d/elections.cnf
+
+# 3. Restart
+systemctl restart mysql
+systemctl restart elections-octane
+
+# Verify
+ps aux | grep octane:worker | wc -l                # expect ~6
+curl -sI https://YOURNAME.duckdns.org/</code></pre>
+
+    <div class="tip">
+      <strong>Alternative — destroy the droplet entirely</strong> to save the full $18/mo. The snapshot ($0.12/mo) keeps everything ready for next time. To bring it back, create a new droplet from the snapshot, then re-attach the DuckDNS IP via the DuckDNS dashboard.
+    </div>
+  </section>
+
+  <!-- =================================================================== MONITORING -->
+  <section id="monitoring" class="phase p2">
+    <h2>Monitoring during the event</h2>
+    <p>Open three SSH windows and run one of these in each:</p>
+    <table>
+      <thead><tr><th>Window</th><th>Command</th><th>Watch for</th></tr></thead>
+      <tbody>
+      <tr><td>System</td><td><code>htop</code></td><td>CPU pegged at 100%, RAM &gt; 14 GB</td></tr>
+      <tr><td>App errors</td><td><code>journalctl -u elections-octane -f | grep -iE 'error|exception|deadlock'</code></td><td>Any error spike</td></tr>
+      <tr><td>DB activity</td><td><code>watch -n 2 'mysql -uroot -e "SHOW PROCESSLIST" election | wc -l'</code></td><td>Connections approaching 180+</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Symptom</th><th>Action</th></tr></thead>
+      <tbody>
+      <tr><td>RAM &gt; 14 GB used</td><td><code>systemctl restart elections-octane</code> — fresh workers, releases memory</td></tr>
+      <tr><td>MySQL connections &gt; 180</td><td>Edit <code>elections.cnf</code> → <code>max_connections = 300</code> → <code>systemctl restart mysql</code></td></tr>
+      <tr><td>Many <em>Deadlock found</em></td><td>The 3-retry in <code>DB::transaction()</code> should handle them; if persistent, queue <code>genearteresults</code> off-request</td></tr>
+      <tr><td>5xx errors</td><td>Tail <code>storage/logs/laravel-$(date +%F).log</code> for the actual exception</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =================================================================== TROUBLESHOOTING -->
+  <section id="troubleshooting">
+    <h2>Troubleshooting (lessons from the first deploy)</h2>
+
+    <details>
+      <summary>"No application encryption key has been specified" — even after key:generate</summary>
+      <ol>
+        <li>An earlier <code>export APP_KEY=...</code> in your shell might be persisting through sudo as an empty string. <strong>Open a fresh SSH session.</strong></li>
+        <li>Check for trailing <code># comment</code> on the APP_KEY line in <code>.env</code> — they break the parser for base64-padded values:<br>
+          <pre><code>sed -i 's/[[:space:]]\+#[[:space:]].*$//' /var/www/elections/.env</code></pre>
+        </li>
+        <li>Rebuild config cache: <code>sudo -u www-data php artisan config:cache</code></li>
+        <li>Verify the key is baked in: <code>sudo -u www-data php -r "echo (include '/var/www/elections/bootstrap/cache/config.php')['app']['key'] ?: 'EMPTY';"</code></li>
+      </ol>
+    </details>
+
+    <details>
+      <summary>Port 8000/8001 already in use after restart</summary>
+      <p><code>pkill -f 'artisan serve'</code> sometimes doesn't match. Use the port instead:</p>
+      <pre><code>fuser -k 8000/tcp
+sleep 2
+ss -ltnp | grep ':8000' || echo "Port free"</code></pre>
+    </details>
+
+    <details>
+      <summary>Browser shows ERR_CONNECTION_RESET / NS_ERROR_NET_TIMEOUT on static assets</summary>
+      <p>Chrome and Safari auto-upgrade <code>http://</code> subresources to <code>https://</code>. Without a TLS cert, those requests fail silently. <strong>Fix: get a TLS cert</strong> (see Phase 1 step 1.6). DuckDNS + Let's Encrypt is free.</p>
+    </details>
+
+    <details>
+      <summary>Login fails with "المقترع غير موجود" (Voter not found)</summary>
+      <p>The login controller uses <code>env('SUPERADMIN_USER')</code> directly. With <code>config:cache</code> on (the production default), <code>env()</code> returns null in controllers. Make sure the values are exposed via config:</p>
+      <pre><code># In config/app.php, add:
+'default_user'     => env('APP_DEFAULTUSER'),
+'superadmin_user'  => env('SUPERADMIN_USER'),
+'superadmin_pass'  => env('SUPERADMIN_PASS'),
+
+# Then in loginController.php (and any view), replace
+# env('SUPERADMIN_USER') with config('app.superadmin_user'), etc.</code></pre>
+    </details>
+
+    <details>
+      <summary>Octane workers crash with "sync_worker_receive_frame: Network: EOF"</summary>
+      <p>You're running with a custom <code>.rr.yaml</code> referencing the non-existent <code>octane:worker</code> command. <strong>Don't use a custom <code>.rr.yaml</code></strong>; let Octane manage RoadRunner:</p>
+      <pre><code>sudo -u www-data php artisan octane:start --server=roadrunner --workers=6</code></pre>
+    </details>
+
+    <details>
+      <summary>SQL dump fails with "Access denied; you need SUPER privilege"</summary>
+      <p>The dump contains <code>DEFINER=root@...</code> clauses on views/triggers. Load it as the MySQL root user via socket auth:</p>
+      <pre><code>sudo mysql election < /var/www/elections/final.sql</code></pre>
+      <p>The app itself still connects as <code>elections_app</code> for normal queries.</p>
+    </details>
+
+    <details>
+      <summary>I edited .env and the site stopped working</summary>
+      <p>Laravel reads from <code>bootstrap/cache/config.php</code>, not <code>.env</code>, when config is cached. After ANY <code>.env</code> change:</p>
+      <pre><code>cd /var/www/elections
+sudo -u www-data php artisan config:cache
+systemctl reload elections-octane</code></pre>
+    </details>
+  </section>
+
+  <footer>
+    Elections deployment runbook · last updated 2026-05-24<br>
+    Companion to <code>PROJECT_CONTEXT.md</code>
+  </footer>
+</div>
+</body>
+</html>

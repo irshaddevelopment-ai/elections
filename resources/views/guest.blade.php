@@ -1206,17 +1206,48 @@
   function previewImage(input) {
     var preview = document.getElementById('image-preview');
     preview.innerHTML = '';
-    if (input.files && input.files[0]) {
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        var img = document.createElement('img');
-        img.src = e.target.result;
-        img.className = 'img-fluid';
-        img.style.maxWidth = window.innerWidth <= 767 ? '50px' : '100px';
-        preview.appendChild(img);
+    if (!(input.files && input.files[0])) return;
+
+    var file = input.files[0];
+    if (!file.type.match(/^image\//)) return;
+
+    // Downscale + compress in the browser before upload, so large photos
+    // (e.g. 9 MB phone pictures) don't hit the server's request-size limits.
+    var MAX_SIDE = 1000;   // px, longest edge
+    var QUALITY = 0.8;     // JPEG quality
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onload = function() {
+        var w = img.width, h = img.height;
+        if (w > MAX_SIDE || h > MAX_SIDE) {
+          if (w >= h) { h = Math.round(h * MAX_SIDE / w); w = MAX_SIDE; }
+          else { w = Math.round(w * MAX_SIDE / h); h = MAX_SIDE; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+        canvas.toBlob(function(blob) {
+          // Put the resized JPEG back into the file input so the form submits it.
+          var baseName = file.name.replace(/\.[^.]+$/, '');
+          var resized = new File([blob], baseName + '.jpg', { type: 'image/jpeg' });
+          var dt = new DataTransfer();
+          dt.items.add(resized);
+          input.files = dt.files;
+
+          var pimg = document.createElement('img');
+          pimg.src = canvas.toDataURL('image/jpeg', QUALITY);
+          pimg.className = 'img-fluid';
+          pimg.style.maxWidth = window.innerWidth <= 767 ? '50px' : '100px';
+          preview.appendChild(pimg);
+        }, 'image/jpeg', QUALITY);
       };
-      reader.readAsDataURL(input.files[0]);
-    }
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   }
 
   $('#add_row_work').click(function() {

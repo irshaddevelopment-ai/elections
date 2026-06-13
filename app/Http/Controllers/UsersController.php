@@ -1036,6 +1036,13 @@ class UsersController extends Controller
 
             $image_file = $request->file('profile_picture');
 
+            // Validate the image up-front (before any DB write) so a too-big or
+            // invalid file fails cleanly instead of silently rolling back the row.
+            if (isset($image_file)) {
+                $request->validate([
+                    'profile_picture' => 'image|mimes:jpeg,png,jpg,gif|max:10240',
+                ]);
+            }
 
             $imageName = '';
             if (isset($image_file)) {
@@ -1102,10 +1109,6 @@ class UsersController extends Controller
                 $fileName = $image_file->getClientOriginalName();
                 //$profile_var->picture = $fileName;
 
-                // Validate the file if needed
-                $request->validate([
-                    'profile_picture' => 'image|mimes:jpeg,png,jpg,gif|max:2048',
-                ]);
                 // Specify the destination folder
                 $destinationPath = public_path('profile_picture');
                 // Check if the file with the same name already exists

@@ -8,3 +8,7 @@ build
 # command, crashing every worker with "Network: EOF". Keep it out of the repo.
 .rr.yaml
 
+
+# Real production secrets live only on the server — never commit them.
+# Use .env.production.example as the fill-in template.
+.env.production

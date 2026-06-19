@@ -113,11 +113,12 @@ class loginController extends Controller
                     if (!isset($count_round)) {
                         $count_round = 0;
                     }
-                    // Winners in the CURRENT round — used to compute remaining slots per list
+                    // Winners decided in PREVIOUS rounds — used to compute remaining slots per list
+                    // (e.g. list needs 3, won 2 in round 1 -> only 1 selectable in round 2)
                     $results_exists = candidates::select('group_code', \DB::raw('count(profile_code) as count_prf'))
                     ->where('elections_code', $user->election_code)
                     ->where('candidate_status', 2)
-                    ->where('round_number', $count_round)
+                    ->where('round_number', '<', $count_round)
                     ->groupBy('group_code')
                     ->pluck('count_prf','group_code')->toArray();
 

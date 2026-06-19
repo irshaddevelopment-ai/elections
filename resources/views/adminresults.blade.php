@@ -296,6 +296,7 @@
               <th>المرشح</th>
               <th>اللائحة</th>
               <th>الأصوات</th>
+              <th>النسبة</th>
               <th>pass</th>
               <th>round_num</th>
               <th>prfcode</th>
@@ -389,9 +390,9 @@
       rowReorder: true,
       columnDefs: [
         { className: 'dt-center', targets: '_all' },
-        { targets: [3, 4, 5, 6], visible: false },
+        { targets: [4, 5, 6, 7], visible: false },
         {
-          targets: 7,
+          targets: 8,
           render: function (data, type) {
             if (type === 'display') {
               return '<button class="btn-delete-row" title="إزالة"><i class="fas fa-trash-alt fa-xs"></i></button>';
@@ -409,23 +410,33 @@
             }
             return data;
           }
+        },
+        {
+          type: 'num-fmt',
+          targets: [3],
+          render: function (data, type) {
+            if (type === 'sort') {
+              return parseFloat(data);
+            }
+            return data;
+          }
         }
       ],
-      order: [[1, 'desc'], [4, 'asc'], [2, 'desc']],
+      order: [[1, 'desc'], [5, 'asc'], [2, 'desc']],
       rowCallback: function (row, data) {
         $(row).removeClass('oldroundwin wincolor nextroundcolor losecolor');
         var round = $('#selectelectionround').val();
-        if (data[3] == 1 && data[4] < round)  $(row).addClass('oldroundwin');
-        if (data[3] == 1 && data[4] == round)  $(row).addClass('wincolor');
-        if (data[3] == 2)                       $(row).addClass('nextroundcolor');
-        if (data[3] == -1)                      $(row).addClass('losecolor');
+        if (data[4] == 1 && data[5] < round)  $(row).addClass('oldroundwin');
+        if (data[4] == 1 && data[5] == round)  $(row).addClass('wincolor');
+        if (data[4] == 2)                       $(row).addClass('nextroundcolor');
+        if (data[4] == -1)                      $(row).addClass('losecolor');
       }
     });
 
     /* ── Row delete click ── */
     $('#dataTable1').on('click', 'tbody td:last-child', function () {
       var rowData = $('#dataTable1').DataTable().row($(this).closest('tr')).data();
-      $('#modal_profile_code').val(rowData[5]);
+      $('#modal_profile_code').val(rowData[6]);
       $('#resetcandidate').modal('show');
     });
 
@@ -452,9 +463,10 @@
       .then(r => r.json())
       .then(data => {
         data.forEach(function (c) {
+          var elect_perc_value = (c.votersTotal > 0 ? (c.elect_perc / c.votersTotal * 100) : 0).toFixed(2) + '%';
           datatable1_dataset.push([
             c.full_name, c.group_name,
-            c.elect_perc + '/' + c.votersTotal,
+            c.elect_perc + '/' + c.votersTotal, elect_perc_value,
             c.reswin, c.can_round_num, c.profile_code, c.win_max, ''
           ]);
         });

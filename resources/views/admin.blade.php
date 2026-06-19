@@ -1,4 +1,8 @@
 @extends('layouts.app')
+
+{{-- Keep the browser Back button working normally on the admin dashboard --}}
+@section('keep_back_button', true)
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 @section('content')

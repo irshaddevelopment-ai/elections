@@ -316,6 +316,25 @@
 
   <!-- MDBootstrap JS CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.19.1/js/mdb.min.js"></script>
+
+  <!-- Log the user out when the browser Back button is pressed -->
+  <!-- (skipped on pages that declare @section('keep_back_button'), e.g. admin) -->
+  @hasSection('keep_back_button')
+  @else
+  <script>
+    (function () {
+      var logoutUrl = "{{ route('logout', ['profile_code' => Session::get('profile_code')]) }}";
+
+      // Trap the first Back press: push a dummy history entry so that
+      // pressing Back fires popstate instead of leaving the page.
+      history.pushState(null, document.title, location.href);
+
+      window.addEventListener('popstate', function () {
+        window.location.replace(logoutUrl);
+      });
+    })();
+  </script>
+  @endif
 </body>
 
 <script>

@@ -929,7 +929,7 @@ class VoterController extends Controller
             foreach ($data as $dataobj) {
                 $odd = ($dataobj['elect_perc'] / $dataobj['votersTotal']) * 100;
                 $reswin = 0;
-                if ($odd > $win_max[$candidate['round_number']]) {
+                if ($odd > $win_max[$dataobj['can_round_num']]) {
                     if (array_key_exists($dataobj['group_code'], $win_number_by_groupcode_array)) {
                         $win_num_key = $win_number_by_groupcode_array[$dataobj['group_code']];
                         $win_number_by_groupcode_array[$dataobj['group_code']] = $win_num_key + 1;
@@ -949,7 +949,7 @@ class VoterController extends Controller
                         $reswin = 1;
                     }
                 } else
-            if ($odd <= $win_max[$candidate['round_number']] && $odd > $win_min[$candidate['round_number']]) {
+            if ($odd <= $win_max[$dataobj['can_round_num']] && $odd > $win_min[$dataobj['can_round_num']]) {
                     $reswin = 2;
                 } else {
                     $reswin = -1;

@@ -312,7 +312,10 @@
       <div class="logo-seal">
         <img class="logo-img" src="{{ URL('images/logo.jpg') }}" alt="شعار">
       </div>
-      <h3>{{ config('app.name', 'نظام الانتخابات') }}</h3>
+      @php
+        $activeElectionName = \App\Models\Election::where('election_status', '1')->value('election_name');
+      @endphp
+      <h3>{{ $activeElectionName ?: config('app.name', 'نظام الانتخابات') }}</h3>
       <div class="gold-rule"></div>
       <p class="subtitle">أدخل رقم المقترع للمتابعة</p>
       <div class="official-badge">

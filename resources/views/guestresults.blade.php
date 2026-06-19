@@ -187,6 +187,7 @@
                      <th class="text-center">المرشح</th>
                      <th class="text-center">اللائحة</th>
                      <th class="text-center">العدد</th>
+                     <th class="text-center">النسبة</th>
                      <th class="text-center">pass</th>
                      <th class="text-center">round_num</th>
                      <th class="text-center">prfcode</th>
@@ -232,7 +233,7 @@
                          className: 'dt-center',
                          targets: '_all'
                      },{
-                        "targets": [3,4,5,6],
+                        "targets": [4,5,6,7],
                     "visible": false
 
                 },{
@@ -247,9 +248,19 @@
                         return data; // Return the original data for display
                     }
                 }
+            },{
+                "type": "num-fmt",
+                "targets": [3], // النسبة column: sort numerically by the percentage value
+                "render": function (data, type, row) {
+                    if (type === "sort") {
+                        return parseFloat(data);
+                    } else {
+                        return data;
+                    }
+                }
             }
                  ],
-                 order: [[1, 'desc'],[4,'asc'],[2,'desc']],
+                 order: [[1, 'desc'],[5,'asc'],[2,'desc']],
                 
                  "rowCallback": function( row, data, index ) {
                   
@@ -260,16 +271,16 @@
                   
                   var round_num_choosen=$('#selectelectionround').val();
            
-           if((data[3]==1)&&(data[4]<round_num_choosen)){
+           if((data[4]==1)&&(data[5]<round_num_choosen)){
               $(row).addClass('oldroundwin');
            }
-           if((data[3]==1)&&(data[4]==round_num_choosen)){
+           if((data[4]==1)&&(data[5]==round_num_choosen)){
               $(row).addClass('wincolor');
            }
-                  if(data[3]==2){
+                  if(data[4]==2){
                      $(row).addClass('nextroundcolor');
                   }
-                  if(data[3]==-1){
+                  if(data[4]==-1){
                      $(row).addClass('losecolor');
                   }
       }
@@ -295,8 +306,9 @@
            
            candidates_winning.forEach(function(candidate, index) {
            
+            var elect_perc_value = (candidate['votersTotal'] > 0 ? (candidate['elect_perc'] / candidate['votersTotal'] * 100) : 0).toFixed(2) + '%';
             var new_row = [candidate['full_name'], candidate['group_name'],
-                candidate['elect_perc']+'/'+candidate['votersTotal'],candidate['reswin'],
+                candidate['elect_perc']+'/'+candidate['votersTotal'],elect_perc_value,candidate['reswin'],
                 candidate['can_round_num'],candidate['profile_code'],candidate['win_max']];
              
                datatable1_dataset.push(new_row);

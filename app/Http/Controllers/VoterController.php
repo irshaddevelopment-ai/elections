@@ -700,7 +700,7 @@ class VoterController extends Controller
                     } else {
                         $candidatesarray_result[$key]["votes_he_got_percentage"] = 0;
                     }
-                    $candidatesarray_result[$key]["ispassed"] = $this->isGreaterThanOrEqualPercentOf(
+                    $candidatesarray_result[$key]["ispassed"] = $this->isGreaterThanPercentOf(
                         $votes_he_got_var,
                         $voters_who_vote_number,
                         $win_percentage
@@ -802,13 +802,13 @@ class VoterController extends Controller
         return 1;
     }
 
-    function isGreaterThanOrEqualPercentOf($number1, $number2, $percentage)
+    function isGreaterThanPercentOf($number1, $number2, $percentage)
     {
-        // Calculate 50% of the second number
+        // Calculate the winning threshold (e.g. 50%) of the second number
         $PercentOfNumber2 = $number2 * ($percentage / 100);
 
-        // Check if the first number is greater than or equal to 50% of the second number
-        return $number1 >= $PercentOfNumber2;
+        // A candidate wins only when strictly above the threshold (e.g. > 50%, not = 50%)
+        return $number1 > $PercentOfNumber2;
     }
 
     function showguestresults($electioncode)
@@ -929,7 +929,7 @@ class VoterController extends Controller
             foreach ($data as $dataobj) {
                 $odd = ($dataobj['elect_perc'] / $dataobj['votersTotal']) * 100;
                 $reswin = 0;
-                if ($odd >= $win_max[$candidate['round_number']]) {
+                if ($odd > $win_max[$candidate['round_number']]) {
                     if (array_key_exists($dataobj['group_code'], $win_number_by_groupcode_array)) {
                         $win_num_key = $win_number_by_groupcode_array[$dataobj['group_code']];
                         $win_number_by_groupcode_array[$dataobj['group_code']] = $win_num_key + 1;
@@ -949,7 +949,7 @@ class VoterController extends Controller
                         $reswin = 1;
                     }
                 } else
-            if ($odd < $win_max[$candidate['round_number']] && $odd > $win_min[$candidate['round_number']]) {
+            if ($odd <= $win_max[$candidate['round_number']] && $odd > $win_min[$candidate['round_number']]) {
                     $reswin = 2;
                 } else {
                     $reswin = -1;

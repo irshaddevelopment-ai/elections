@@ -802,6 +802,10 @@ class UsersController extends Controller
 
     public function saveuserinfo(Request $request)
     {
+        // Reject empty names so a blank form can never wipe an existing profile.
+        if (trim((string) $request->input('input_fullname')) === '') {
+            return back()->with('Error', 'الاسم مطلوب — لا يمكن حفظ بطاقة بدون اسم');
+        }
         try {
             DB::unprepared('LOCK TABLES profiles WRITE');
             DB::beginTransaction();
@@ -997,6 +1001,10 @@ class UsersController extends Controller
 
     public function saveprofileextrainfo(Request $request)
     {
+        // Reject empty names so a blank ID card can never wipe an existing profile.
+        if (trim((string) $request->input('idcard_input_fullname')) === '') {
+            return back()->with('Error', 'الاسم مطلوب — لا يمكن حفظ بطاقة بدون اسم');
+        }
         try {
             DB::unprepared('LOCK TABLES profiles WRITE');
             DB::beginTransaction();

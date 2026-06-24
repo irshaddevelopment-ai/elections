@@ -97,6 +97,7 @@ class loginController extends Controller
                                 ->where('elections_code', $user->election_code)
                                 ->where('group_code', $candidate_groups[0]->group_code)
                                 ->where('round_number', $count_round)
+                                ->orderBy('full_name')
                                 ->get();
                         } else {
                             $candidates = [];

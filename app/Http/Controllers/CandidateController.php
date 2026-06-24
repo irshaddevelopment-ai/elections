@@ -66,6 +66,7 @@ class CandidateController extends Controller
             ->where('round_number', $round_number)
             ->where('candidate_status', 1)
             ->where('group_code', $group_code)
+            ->orderBy('full_name')
             ->get();
         $data['group_win_number'] = $cand_winnumber;
         $data['sum_win_number'] = $sum_win_number;

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دليل النشر الكامل — elections-vote</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#ffffff; --ink:#1e293b; --muted:#64748b;
+    --primary:#1e4098; --primary-soft:#e8eefb; --gold:#c8920a;
+    --code-bg:#0f172a; --code-ink:#e2e8f0;
+    --warn-bg:#fff4e5; --warn-bd:#f0a020; --warn-ink:#7a4a00;
+    --ok-bg:#e7f7ec; --ok-bd:#28a745; --ok-ink:#13632b;
+    --rule-bg:#eef2ff; --rule-bd:#1e4098;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic",sans-serif;
+    background:var(--bg); color:var(--ink); margin:0; line-height:1.85;
+    font-size:16px;
+  }
+  .wrap{max-width:980px; margin:0 auto; padding:32px 20px 80px;}
+  header.title{
+    background:linear-gradient(160deg,#1a3268 0%,#1e4098 55%,#16305e 100%);
+    color:#fff; border-radius:16px; padding:30px 28px; margin-bottom:26px;
+    box-shadow:0 10px 30px rgba(30,64,152,.25);
+  }
+  header.title h1{margin:0 0 6px; font-size:1.8rem;}
+  header.title p{margin:0; color:#cdd9f5; font-size:.98rem;}
+  h2{
+    color:var(--primary); border-right:5px solid var(--gold);
+    padding:6px 14px 6px 0; margin:38px 0 14px; font-size:1.35rem;
+  }
+  h3{color:#16305e; margin:22px 0 8px; font-size:1.08rem;}
+  p,li{font-size:1rem;}
+  a{color:var(--primary);}
+  code{
+    background:#eef1f7; color:#b1004a; padding:2px 6px; border-radius:5px;
+    font-family:Consolas,Monaco,monospace; font-size:.9em; direction:ltr; unicode-bidi:embed;
+  }
+  pre{
+    background:var(--code-bg); color:var(--code-ink); padding:16px 18px;
+    border-radius:12px; overflow-x:auto; direction:ltr; text-align:left;
+    font-family:Consolas,Monaco,monospace; font-size:.86rem; line-height:1.7;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);
+  }
+  pre code{background:none; color:inherit; padding:0; font-size:1em;}
+  table{
+    width:100%; border-collapse:collapse; margin:14px 0; background:var(--card);
+    border-radius:10px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  th,td{padding:11px 14px; text-align:right; border-bottom:1px solid #eef0f5; font-size:.95rem;}
+  th{background:linear-gradient(135deg,#f8f4e8,#fef9e7); color:#16305e; font-weight:700;}
+  tr:last-child td{border-bottom:none;}
+  td code, th code{direction:ltr; display:inline-block;}
+  .callout{border-radius:12px; padding:14px 18px; margin:16px 0; font-size:.97rem;}
+  .rule{background:var(--rule-bg); border:1.5px solid var(--rule-bd); color:#16305e; font-weight:600;}
+  .warn{background:var(--warn-bg); border:1.5px solid var(--warn-bd); color:var(--warn-ink);}
+  .ok{background:var(--ok-bg); border:1.5px solid var(--ok-bd); color:var(--ok-ink);}
+  .step{
+    background:var(--card); border:1px solid #e6e9f0; border-radius:12px;
+    padding:6px 18px 14px; margin:14px 0; box-shadow:0 1px 2px rgba(0,0,0,.04);
+  }
+  .num{
+    display:inline-block; background:var(--primary); color:#fff; font-weight:700;
+    width:26px; height:26px; line-height:26px; text-align:center; border-radius:50%;
+    margin-left:8px; font-size:.85rem;
+  }
+  .toc{background:var(--card); border:1px solid #e6e9f0; border-radius:12px; padding:14px 24px; margin-bottom:10px;}
+  .toc ol{margin:6px 0; padding-right:18px;}
+  .toc a{text-decoration:none;}
+  hr{border:none; border-top:1px solid #e2e6ee; margin:34px 0;}
+  .tag{display:inline-block; background:var(--primary-soft); color:var(--primary);
+    border-radius:6px; padding:1px 8px; font-size:.8rem; font-weight:700; direction:ltr;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="title">
+    <h1>دليل النشر (Deployment) الكامل</h1>
+    <p>elections-vote.duckdns.org — مكتوب بناءً على الأعطال الحقيقية لتتجنّبها</p>
+  </header>
+
+  <div class="callout rule">
+    🔑 <strong>القاعدة الذهبية:</strong> الكود يتدفّق باتجاه واحد فقط:<br>
+    <span class="tag">محليًا (local) ← git push ← السيرفر git pull ← systemctl restart elections-octane</span><br>
+    لا تعدّل الكود على السيرفر مباشرة، ولا تعمل <code>commit</code>/<code>push</code> من السيرفر أبدًا.
+  </div>
+
+  <div class="toc">
+    <strong>المحتويات</strong>
+    <ol>
+      <li><a href="#s0">نظرة سريعة على البنية</a></li>
+      <li><a href="#s1">النشر الروتيني (الأكثر استخدامًا)</a></li>
+      <li><a href="#s2">قائمة الأخطاء الشائعة وكيف تتجنّبها</a></li>
+      <li><a href="#s3">استكشاف الأعطال السريع</a></li>
+      <li><a href="#s4">إعداد سيرفر جديد من snapshot</a></li>
+      <li><a href="#s5">التحجيم (Scale up / down)</a></li>
+      <li><a href="#s6">الصيانة الدورية</a></li>
+      <li><a href="#s7">ملف الـ systemd unit الصحيح</a></li>
+      <li><a href="#cheat">بطاقة سريعة (Cheat sheet)</a></li>
+    </ol>
+  </div>
+
+  <!-- 0 -->
+  <h2 id="s0">0. نظرة سريعة على البنية</h2>
+  <table>
+    <tr><th>المكوّن</th><th>القيمة</th></tr>
+    <tr><td>الدومين</td><td><code>https://elections-vote.duckdns.org</code> (DuckDNS)</td></tr>
+    <tr><td>مزوّد الخدمة</td><td>DigitalOcean — droplet في FRA1</td></tr>
+    <tr><td>مسار المشروع</td><td><code>/var/www/elections</code></td></tr>
+    <tr><td>مستخدم التشغيل</td><td><code>www-data</code></td></tr>
+    <tr><td>تطبيق الخادم</td><td>Laravel <strong>Octane + RoadRunner</strong> على المنفذ <code>:8000</code></td></tr>
+    <tr><td>الـ systemd service</td><td><code>elections-octane</code></td></tr>
+    <tr><td>الـ reverse proxy</td><td><strong>nginx</strong> (80/443 → 127.0.0.1:8000)</td></tr>
+    <tr><td>TLS</td><td>Let's Encrypt (certbot)</td></tr>
+    <tr><td>قاعدة البيانات</td><td>MySQL 8 (<code>election</code>)</td></tr>
+    <tr><td>الجلسات</td><td>Redis</td></tr>
+    <tr><td>ملف البيئة الفعّال</td><td><code>.env.production</code> (هو <strong>symlink</strong> إلى <code>.env</code>)</td></tr>
+  </table>
+  <p>السبب أن Laravel يقرأ <code>.env.production</code> وليس <code>.env</code>: لأن <code>APP_ENV=production</code> يُمرَّر إلى الـ workers، فيبحث Laravel عن <code>.env.{APP_ENV}</code>. لذلك جعلناه symlink لـ <code>.env</code> كي لا يختلفا أبدًا.</p>
+
+  <!-- 1 -->
+  <h2 id="s1">1. النشر الروتيني — نشر تعديل على الكود</h2>
+
+  <div class="step"><h3><span class="num">1</span>محليًا (على جهازك)</h3>
+  <pre><code>git add -A
+git commit -m "وصف التعديل"
+git push origin main</code></pre></div>
+
+  <div class="step"><h3><span class="num">2</span>على السيرفر (عبر SSH)</h3>
+  <pre><code>cd /var/www/elections
+git pull origin main</code></pre></div>
+
+  <div class="step"><h3><span class="num">3</span>إن تغيّرت مكتبات composer فقط (وإلا تجاوزها)</h3>
+  <pre><code>sudo -u www-data composer install --no-dev --optimize-autoloader</code></pre></div>
+
+  <div class="step"><h3><span class="num">4</span>مسح الكاش (نفّذها كـ www-data وليس root)</h3>
+  <pre><code>sudo -u www-data php artisan view:clear
+sudo -u www-data php artisan config:clear</code></pre></div>
+
+  <div class="step"><h3><span class="num">5</span>إعادة تشغيل الـ workers (إلزامي)</h3>
+  <pre><code>sudo systemctl restart elections-octane</code></pre>
+  <div class="callout warn">⚠️ Octane يحتفظ بالكود في الذاكرة (warm). تعديل الملفات لا يظهر حتى تعيد التشغيل. استعمل <code>restart</code> وليس <code>octane:reload</code> (الأخير يعطي خطأ بسبب <code>.rr.yaml</code> الفارغ — وهذا طبيعي).</div></div>
+
+  <div class="step"><h3><span class="num">6</span>التحقّق</h3>
+  <pre><code>curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/
+curl -s -o /dev/null -w "%{http_code}\n" https://elections-vote.duckdns.org/</code></pre>
+  <p>متوقّع <code>200</code>. ثم في المتصفّح <strong>Ctrl+Shift+R</strong> لتجاوز كاش الصفحة.</p></div>
+
+  <div class="step"><h3><span class="num">7</span>إن ظهرت أخطاء صلاحيات</h3>
+  <pre><code>sudo chown -R www-data:www-data storage bootstrap/cache</code></pre></div>
+
+  <!-- 2 -->
+  <h2 id="s2">2. قائمة الأخطاء الشائعة وكيف تتجنّبها</h2>
+  <p>هذه هي الأعطال التي أوقعتنا فعليًا — احفظها:</p>
+  <ol>
+    <li><strong>التعديل لا يظهر بعد <code>git pull</code></strong> → نسيت إعادة تشغيل Octane: <code>sudo systemctl restart elections-octane</code>.</li>
+    <li><strong>500 و <code>MissingAppKeyException</code></strong> → <code>.env.production</code> غير مقروء من www-data:
+      <pre><code>sudo chown -h www-data:www-data /var/www/elections/.env.production
+sudo -u www-data head -c1 /var/www/elections/.env.production && echo " READABLE"</code></pre></li>
+    <li><strong>تشغيل artisan كـ root</strong> يجعل <code>storage/</code> و <code>bootstrap/cache/</code> مملوكة لـ root → 500 بلا أثر. دائمًا نفّذ artisan كـ www-data. الإصلاح:
+      <pre><code>sudo chown -R www-data:www-data storage bootstrap/cache</code></pre></li>
+    <li><strong><code>502 Bad Gateway</code></strong> = nginx لا يصل إلى Octane (الـ service متوقّف): <code>sudo systemctl restart elections-octane</code>.</li>
+    <li><strong><code>can't communicate with the worker</code> / <code>Network: EOF</code></strong> = الـ worker يموت أثناء الإقلاع (ليست مشكلة شبكة). ابحث عن سبب الانهيار (مفتاح ناقص، صلاحيات، class ناقص) — انظر القسم 3.</li>
+    <li><strong>بعد <code>git reset --hard</code></strong> يفقد <code>rr</code> صلاحية التنفيذ:
+      <pre><code>sudo chmod +x /var/www/elections/rr &amp;&amp; sudo systemctl restart elections-octane</code></pre></li>
+    <li><strong>لا تعمل commit/push من السيرفر أبدًا</strong> — <code>git status</code> هناك فوضوي عمدًا (أسرار + vendor محذوف جزئيًا). أي commit يسرّب الأسرار.</li>
+    <li><strong>لا تشغّل <code>apt upgrade</code> ولا reboot أثناء استخدام فعلي</strong> — تحديثات MySQL/nginx التلقائية أسقطت الموقع مرة. التحديثات التلقائية <strong>معطّلة</strong> الآن (انظر القسم 6).</li>
+    <li class="">⛔ <strong>لا تضغط <code>/resetdata</code> في الإنتاج أبدًا</strong> — يمسح كل قاعدة البيانات.</li>
+  </ol>
+
+  <!-- 3 -->
+  <h2 id="s3">3. استكشاف الأعطال السريع</h2>
+  <p>ابدأ دائمًا بهذا الفحص الشامل:</p>
+  <pre><code>echo "Octane: $(systemctl is-active elections-octane) | MySQL: $(systemctl is-active mysql) | Redis: $(systemctl is-active redis-server)"
+echo "Workers: $(pgrep -fc roadrunner-worker)"
+curl -s -o /dev/null -w "LOCAL %{http_code}\n" http://127.0.0.1:8000/
+free -h | head -2
+tail -n 30 /var/www/elections/storage/logs/laravel.log</code></pre>
+
+  <table>
+    <tr><th>العرَض</th><th>الفحص</th><th>الحل</th></tr>
+    <tr><td>502</td><td><code>systemctl status elections-octane</code></td><td><code>sudo systemctl restart elections-octane</code></td></tr>
+    <tr><td>500 + MissingAppKey</td><td>صلاحيات <code>.env.production</code></td><td><code>chown -h www-data:www-data .env.production</code></td></tr>
+    <tr><td>500 عام</td><td><code>tail laravel.log</code></td><td>حسب الاستثناء الظاهر</td></tr>
+    <tr><td>الـ service متوقّف بعد تحديث</td><td>journal فيه "apt upgrade"</td><td>تأكّد من <code>Wants=</code> و <code>Restart=always</code></td></tr>
+    <tr><td>000 / لا يردّ</td><td><code>chmod +x rr</code> ثم restart</td><td></td></tr>
+  </table>
+
+  <p>لرؤية الخطأ الحقيقي من داخل الـ worker (عند "can't communicate"):</p>
+  <pre><code>sudo systemctl stop elections-octane
+cd /var/www/elections
+sudo -u www-data env APP_BASE_PATH=/var/www/elections APP_ENV=production LARAVEL_OCTANE=1 \
+  /var/www/elections/rr serve -c /var/www/elections/.rr.yaml \
+  -o version=3 -o http.address=127.0.0.1:8000 \
+  -o server.command=/usr/bin/php8.2,/var/www/elections/vendor/bin/roadrunner-worker \
+  -o http.pool.num_workers=1 -o rpc.listen=tcp://127.0.0.1:6001 \
+  -o logs.level=debug -o logs.mode=development -o logs.output=stdout > /tmp/rr.log 2>&1 &
+sleep 5; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/; sleep 1; cat /tmp/rr.log; kill %1
+sudo systemctl start elections-octane</code></pre>
+
+  <!-- 4 -->
+  <h2 id="s4">4. إعداد سيرفر جديد من snapshot (الاستعادة / تغيير الريجن)</h2>
+  <div class="callout warn">عند إنشاء droplet من snapshot يتغيّر الـ <strong>IP</strong> — لذا حدّث DNS و TLS.</div>
+  <ol>
+    <li><strong>أنشئ droplet من الـ snapshot</strong> (Snapshots → Create Droplet) واختر الريجن والحجم.</li>
+    <li><strong>حدّث DuckDNS</strong>: غيّر IP الدومين <code>elections-vote</code> إلى IP الجديد.</li>
+    <li><strong>SSH</strong> وأصلح ما يلزم:
+      <pre><code>cd /var/www/elections
+sudo chmod +x rr
+sudo chown -R www-data:www-data storage bootstrap/cache
+sudo chown -h www-data:www-data .env.production
+sudo systemctl restart elections-octane mysql redis-server nginx</code></pre></li>
+    <li><strong>HTTPS</strong>: الشهادة داخل النسخة وصالحة للدومين. للتجديد: <code>sudo certbot renew --dry-run</code>.</li>
+    <li><strong>عطّل التحديثات التلقائية</strong>:
+      <pre><code>sudo systemctl disable --now apt-daily-upgrade.timer apt-daily.timer</code></pre></li>
+    <li><strong>تحقّق نهائي</strong>: <code>curl -s -o /dev/null -w "%{http_code}\n" https://elections-vote.duckdns.org/</code></li>
+  </ol>
+
+  <!-- 5 -->
+  <h2 id="s5">5. التحجيم (Scale up / down)</h2>
+  <div class="callout warn">⚠️ عند الـ resize اختر دائمًا <strong>"CPU and RAM only"</strong> (قابل للعكس). خيار "Disk, CPU and RAM" يكبّر القرص بشكل دائم ولا يمكن تصغيره.</div>
+
+  <h3>رفع الموارد قبل الحدث</h3>
+  <ol>
+    <li>خذ snapshot احتياطي.</li>
+    <li>أطفئ الـ droplet → Resize (CPU &amp; RAM only) → الخطة الأكبر المتاحة.</li>
+    <li>ارفع عدد الـ workers:
+      <pre><code>sudo sed -i 's/--workers=12/--workers=16/' /etc/systemd/system/elections-octane.service
+sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart elections-octane</code></pre></li>
+    <li>ارفع MySQL buffer (إن كان RAM ≥ 16GB) في <code>/etc/mysql/mysql.conf.d/zz-elections-tuning.cnf</code>:
+      <pre><code>[mysqld]
+innodb_buffer_pool_size = 4G
+max_connections = 200</code></pre>
+      ثم <code>sudo systemctl restart mysql</code>.</li>
+  </ol>
+  <p>القيم الحالية (4 vCPU / 8 GB): <code>--workers=12</code>، buffer <code>2G</code>، max_connections <code>150</code>.</p>
+
+  <h3>إيقاف الدفع بعد الحدث (الأهم)</h3>
+  <div class="callout warn">💸 <strong>إطفاء الـ droplet لا يوقف الفوترة</strong> — تبقى تدفع كامل السعر. لتوقّف الدفع فعليًا:</div>
+  <ol>
+    <li>خذ snapshot نهائي (Power off → Take Snapshot).</li>
+    <li><strong>احذف الـ droplet</strong> (Destroy). عندها تدفع فقط تخزين الـ snapshot (سنتات/شهر).</li>
+    <li>عند العودة: أنشئ droplet من الـ snapshot واتبع القسم 4.</li>
+  </ol>
+
+  <!-- 6 -->
+  <h2 id="s6">6. الصيانة الدورية (التحديث التلقائي معطّل)</h2>
+  <p>حدّث يدويًا كل بضعة أسابيع في وقت هادئ (ليس أثناء استخدام):</p>
+  <pre><code>sudo apt update &amp;&amp; sudo apt upgrade -y
+sudo systemctl restart elections-octane
+curl -s -o /dev/null -w "%{http_code}\n" https://elections-vote.duckdns.org/</code></pre>
+
+  <!-- 7 -->
+  <h2 id="s7">7. ملف الـ systemd unit الصحيح (المتين)</h2>
+  <p><code>/etc/systemd/system/elections-octane.service</code> يجب أن يكون هكذا:</p>
+  <pre><code>[Unit]
+Description=Elections Octane Server (RoadRunner)
+After=network.target mysql.service redis-server.service
+Wants=mysql.service redis-server.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/elections
+ExecStart=/usr/bin/php /var/www/elections/artisan octane:start --server=roadrunner --host=0.0.0.0 --port=8000 --workers=12 --max-requests=1000
+ExecReload=/usr/bin/php /var/www/elections/artisan octane:reload
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+  <div class="callout ok">
+    ✅ <code>Wants=</code> (وليس <code>Requires=</code>): كي لا يتوقّف Octane عند إعادة تشغيل MySQL/Redis.<br>
+    ✅ <code>Restart=always</code>: كي يعود تلقائيًا بعد أي انهيار.<br>
+    بعد أي تعديل: <code>sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart elections-octane</code><br>
+    اختبار التعافي: <code>sudo systemctl kill -s SIGKILL elections-octane</code> ثم تأكّد أنه عاد (active + 200).
+  </div>
+
+  <!-- cheat -->
+  <h2 id="cheat">بطاقة سريعة (Cheat sheet)</h2>
+  <pre><code># نشر تعديل
+cd /var/www/elections &amp;&amp; git pull origin main \
+  &amp;&amp; sudo -u www-data php artisan view:clear \
+  &amp;&amp; sudo -u www-data php artisan config:clear \
+  &amp;&amp; sudo systemctl restart elections-octane \
+  &amp;&amp; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/
+
+# الموقع واقع؟
+sudo systemctl restart elections-octane
+
+# فحص صحّة
+systemctl is-active elections-octane mysql redis-server; pgrep -fc roadrunner-worker</code></pre>
+
+</div>
+</body>
+</html>

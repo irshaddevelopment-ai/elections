@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/wamp64/apps/**)",
+      "Read(//c/wamp64/alias//**)",
+      "Bash(curl -L -o /c/wamp64/www/adminer.php https://www.adminer.org/latest.php)",
+      "Bash(netsh interface *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3307\")",
+      "Bash(findstr \":3306\")",
+      "Bash(tasklist /FI \"PID eq 12532\")",
+      "Bash(tasklist /FI \"PID eq 30012\")",
+      "PowerShell(Get-Process -Id 12532,30012)",
+      "PowerShell($used = \\(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort\\) ; if \\($used -contains 13306\\) { \"13306 is IN USE\" } else { \"13306 is FREE - safe to use\" })",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\.ssh\" -ErrorAction SilentlyContinue | Select-Object Name,Length | Format-Table -AutoSize)",
+      "PowerShell(Get-Content \"$env:USERPROFILE\\\\.ssh\\\\id_rsa\" -TotalCount 1)"
+    ]
+  }
+}
